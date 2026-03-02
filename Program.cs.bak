@@ -445,12 +445,10 @@ class Program
         float papShort = Math.Min(paperW, paperH);
         float papLong = Math.Max(paperW, paperH);
 
-        // Allow cropped pages
-        float shortDiff = (papShort - imgShort) / papShort * 100f;
-        float longDiff = (papLong - imgLong) / papLong * 100f;
+        float shortDiff = Math.Abs(imgShort - papShort) / papShort * 100f;
+        float longDiff = Math.Abs(imgLong - papLong) / papLong * 100f;
 
-        return shortDiff >= 0 && longDiff >= 0 &&
-               shortDiff <= percentThreshold &&
+        return shortDiff <= percentThreshold &&
                longDiff <= percentThreshold;
     }
 
