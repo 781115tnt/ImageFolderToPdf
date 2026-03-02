@@ -312,6 +312,7 @@ class Program
         return dict;
     }
 
+
     static string NaturalKey(string path)
     {
         string name = IOPath.GetFileNameWithoutExtension(path);
