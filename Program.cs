@@ -111,6 +111,7 @@ class Program
             true
         );
 
+
         CreatePdfFromFilesNoFormat(folder, outputPdf + "_NO_" + ".pdf", false);
 
         Console.WriteLine("Done.");
@@ -127,7 +128,7 @@ class Program
 
         const float toleranceMm = 2f;
 
-        string sizeLabel = null;
+        string? sizeLabel = null;
 
         foreach (var kv in PaperSizes)
         {
@@ -185,25 +186,6 @@ class Program
             writer.WriteLine($"{kv.Key} - {kv.Value}");
         }
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
