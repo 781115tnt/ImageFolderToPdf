@@ -161,7 +161,7 @@ y
 
 
 ==================================================
--percentthreshold
+-autosizetolerance
 ==================================================
 
 Used only when:
@@ -175,8 +175,8 @@ Default
 
 Example
 
--percentthreshold=10
--percentthreshold=35
+-autosizetolerance=10
+-autosizetolerance=35
 
 Useful when
 
@@ -235,7 +235,7 @@ Book layout
 
 Heavily cropped scans
 
--command=file2pdf -input=scans -output=clean.pdf -pagesize=auto -percentthreshold=35
+-command=file2pdf -input=scans -output=clean.pdf -pagesize=auto -autosizetolerance=35
 
 
 Print-ready A3
@@ -267,7 +267,7 @@ DEFAULT VALUES
 margin             = 8 mm
 numberoffset       = 4 mm
 stretch            = y
-percentthreshold   = 5
+autosizetolerance   = 5
 pagesize           = A4
 pagewidth          = disabled
 font               = Arial
