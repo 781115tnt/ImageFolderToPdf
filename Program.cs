@@ -96,8 +96,11 @@ class Program
             stretch,
             percentThreshold,
             pageSizeOption,
-            pageWidth
+            pageWidth,
+            true
         );
+
+        CreatePdfFromFilesNoFormat(folder, outputPdf + "_NO_" + ".pdf", false);
 
         Console.WriteLine("Done.");
         return 0;
@@ -106,7 +109,7 @@ class Program
 
 
 
-    static void AddPagesFromPdf(string file, ref int pageNumber, PdfWriter writer, PdfDocument pdf, PdfFont font)
+    static void AddPagesFromPdf(string file, ref int pageNumber, PdfWriter writer, PdfDocument pdf, PdfFont font, bool addPageNumber = true)
     {
         using var src = new PdfDocument(new PdfReader(file));
 
@@ -224,18 +227,21 @@ class Program
             );
 
             // Page number
-            canvas.BeginText();
-            canvas.SetFontAndSize(font, fontSize);
-            canvas.SetFillColor(ColorConstants.GRAY);
-            canvas.MoveText(numberOffset, numberOffset);
-            canvas.ShowText(pageNumber.ToString());
-            canvas.EndText();
+            if (addPageNumber)
+            {
+                canvas.BeginText();
+                canvas.SetFontAndSize(font, fontSize);
+                canvas.SetFillColor(ColorConstants.GRAY);
+                canvas.MoveText(numberOffset, numberOffset);
+                canvas.ShowText(pageNumber.ToString());
+                canvas.EndText();
+            }
         }
     }
 
 
 
-    static void AddPageFromImage(string image, ref int pageNumber, PdfWriter writer, PdfDocument pdf, PdfFont font)
+    static void AddPageFromImage(string image, ref int pageNumber, PdfWriter writer, PdfDocument pdf, PdfFont font, bool addPageNumber = true)
     {
 
         var imageData = ImageDataFactory.Create(image);
@@ -385,13 +391,15 @@ class Program
 
             canvas.RestoreState();
         }
-
-        canvas.BeginText();
-        canvas.SetFontAndSize(font, fontSize);
-        canvas.SetFillColor(ColorConstants.GRAY);
-        canvas.MoveText(numberOffset, numberOffset);
-        canvas.ShowText(pageNumber.ToString());
-        canvas.EndText();
+        if (addPageNumber)
+        {
+            canvas.BeginText();
+            canvas.SetFontAndSize(font, fontSize);
+            canvas.SetFillColor(ColorConstants.GRAY);
+            canvas.MoveText(numberOffset, numberOffset);
+            canvas.ShowText(pageNumber.ToString());
+            canvas.EndText();
+        }
     }
 
 
@@ -406,7 +414,8 @@ class Program
          bool stretch,
          float percentThreshold,
          string pageSizeOption,
-         float? pageWidth)
+         float? pageWidth,
+         bool addPageNumber=true)
     {
         var supportedFiles = Directory
             .EnumerateFiles(folder)
@@ -427,11 +436,125 @@ class Program
 
         foreach (var file in supportedFiles)
         {
-            if (file.EndsWith(PDF_EXTENSION) == false) AddPageFromImage(file, ref pageNumber, writer, pdf, font);
-            else AddPagesFromPdf(file, ref pageNumber, writer, pdf, font);
+            if (file.EndsWith(PDF_EXTENSION) == false) AddPageFromImage(file, ref pageNumber, writer, pdf, font, addPageNumber);
+            else AddPagesFromPdf(file, ref pageNumber, writer, pdf, font, addPageNumber);
         }
     }
 
+    static void CreatePdfFromFilesNoFormat(
+        string folder,
+        string outputPdf,
+        bool autoPortrait = false)
+    {
+        var supportedFiles = Directory
+            .EnumerateFiles(folder)
+            .Where(f => ImageExtensions.Contains(IOPath.GetExtension(f).ToLower()))
+            .OrderBy(f => IOPath.GetFileName(f), new NaturalSortComparer())
+            .ToList();
+
+        using var writer = new PdfWriter(outputPdf);
+        using var pdf = new PdfDocument(writer);
+
+        foreach (var file in supportedFiles)
+        {
+            if (!file.EndsWith(PDF_EXTENSION))
+            {
+                var imageData = ImageDataFactory.Create(file);
+
+                float pixelWidth = imageData.GetWidth();
+                float pixelHeight = imageData.GetHeight();
+
+                float dpiX = imageData.GetDpiX() > 0 ? imageData.GetDpiX() : 72;
+                float dpiY = imageData.GetDpiY() > 0 ? imageData.GetDpiY() : 72;
+
+                float imageWidthPts = pixelWidth * 72f / dpiX;
+                float imageHeightPts = pixelHeight * 72f / dpiY;
+
+                float pageWidth = imageWidthPts;
+                float pageHeight = imageHeightPts;
+
+                if (autoPortrait)
+                {
+                    pageWidth = Math.Min(imageWidthPts, imageHeightPts);
+                    pageHeight = Math.Max(imageWidthPts, imageHeightPts);
+                }
+
+                var page = pdf.AddNewPage(new PageSize(pageWidth, pageHeight));
+                var canvas = new PdfCanvas(page);
+
+                bool rotate = autoPortrait && imageWidthPts > imageHeightPts;
+
+                if (!rotate)
+                {
+                    canvas.AddImageFittedIntoRectangle(
+                        imageData,
+                        new Rectangle(0, 0, pageWidth, pageHeight),
+                        false);
+                }
+                else
+                {
+                    canvas.SaveState();
+
+                    canvas.ConcatMatrix(0, 1, -1, 0, pageWidth, 0);
+
+                    canvas.AddImageFittedIntoRectangle(
+                        imageData,
+                        new Rectangle(0, 0, pageHeight, pageWidth),
+                        false);
+
+                    canvas.RestoreState();
+                }
+            }
+            else
+            {
+                using var src = new PdfDocument(new PdfReader(file));
+
+                for (int i = 1; i <= src.GetNumberOfPages(); i++)
+                {
+                    var srcPage = src.GetPage(i);
+                    var pageCopy = srcPage.CopyAsFormXObject(pdf);
+
+                    Rectangle bbox = pageCopy.GetBBox().ToRectangle();
+
+                    float w = bbox.GetWidth();
+                    float h = bbox.GetHeight();
+
+                    float pageWidth = w;
+                    float pageHeight = h;
+
+                    if (autoPortrait)
+                    {
+                        pageWidth = Math.Min(w, h);
+                        pageHeight = Math.Max(w, h);
+                    }
+
+                    var newPage = pdf.AddNewPage(new PageSize(pageWidth, pageHeight));
+                    var canvas = new PdfCanvas(newPage);
+
+                    bool rotate = autoPortrait && w > h;
+
+                    if (!rotate)
+                    {
+                        canvas.AddXObjectFittedIntoRectangle(
+                            pageCopy,
+                            new Rectangle(0, 0, pageWidth, pageHeight));
+                    }
+                    else
+                    {
+                        canvas.SaveState();
+
+                        canvas.ConcatMatrix(0, 1, -1, 0, pageWidth, 0);
+
+                        canvas.AddXObjectFittedIntoRectangle(
+                            pageCopy,
+                            new Rectangle(0, 0, pageHeight, pageWidth));
+
+                        canvas.RestoreState();
+                    }
+                }
+            }
+        }
+    }
     static bool IsPaperMatch(
         float imageW,
         float imageH,
