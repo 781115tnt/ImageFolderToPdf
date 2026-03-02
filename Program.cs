@@ -44,26 +44,26 @@ class Program
         { "A0", (841, 1189) },
         { "2A0",(1189,1682) }
     };
-        static string folder="";
-        static string outputPdf="";
+    static string folder = "";
+    static string outputPdf = "";
 
-        static float marginMm = 8f;
-        static float numberOffsetMm = 4f;
-        static bool stretch = true;
-        static float percentThreshold = 5f;
-        static string pageSizeOption="A4";
-        static float? fitWidth = 210f;
+    static float marginMm = 8f;
+    static float numberOffsetMm = 4f;
+    static bool stretch = true;
+    static float percentThreshold = 5f;
+    static string pageSizeOption = "A4";
+    static float? fitWidth = 210f;
 
-        static string fontPath = @"C:\Windows\Fonts\arial.ttf";
-        static float fontSize = 5f;
+    static string fontPath = @"C:\Windows\Fonts\arial.ttf";
+    static float fontSize = 5f;
 
     static int Main(string[] args)
     {
         var options = ParseArguments(args);
 
-        if (!options.ContainsKey("command") || options["command"] != "img2pdf")
+        if (!options.ContainsKey("command") || options["command"] != "file2pdf")
         {
-            Console.WriteLine("Usage: -command=img2pdf -input=folder -output=file.pdf");
+            Console.WriteLine("Usage: -command=file2pdf -input=folder -output=file.pdf");
             return 1;
         }
 
@@ -86,7 +86,7 @@ class Program
         fontPath = @"C:\Windows\Fonts\arial.ttf";
         fontSize = 5f;
 
-        CreatePdfFromImages(
+        CreatePdfFromFiles(
             folder,
             outputPdf,
             marginMm,
@@ -102,6 +102,8 @@ class Program
         Console.WriteLine("Done.");
         return 0;
     }
+    
+    
     static void AddPagesFromPdf(string file, ref int pageNumber, PdfWriter writer, PdfDocument pdf, PdfFont font)
     {
         using var src = new PdfDocument(new PdfReader(file));
@@ -226,165 +228,168 @@ class Program
             canvas.EndText();
         }
     }
+    
+    
     static void AddPageFromImage(string image, ref int pageNumber, PdfWriter writer, PdfDocument pdf, PdfFont font)
     {
-        
-            var imageData = ImageDataFactory.Create(image);
 
-            float pixelWidth = imageData.GetWidth();
-            float pixelHeight = imageData.GetHeight();
+        var imageData = ImageDataFactory.Create(image);
 
-            float dpiX = imageData.GetDpiX() > 0 ? imageData.GetDpiX() : 72;
-            float dpiY = imageData.GetDpiY() > 0 ? imageData.GetDpiY() : 72;
+        float pixelWidth = imageData.GetWidth();
+        float pixelHeight = imageData.GetHeight();
 
-            float imageWidthPts = pixelWidth * 72f / dpiX;
-            float imageHeightPts = pixelHeight * 72f / dpiY;
+        float dpiX = imageData.GetDpiX() > 0 ? imageData.GetDpiX() : 72;
+        float dpiY = imageData.GetDpiY() > 0 ? imageData.GetDpiY() : 72;
 
-            float pageWidth;
-            float pageHeight;
+        float imageWidthPts = pixelWidth * 72f / dpiX;
+        float imageHeightPts = pixelHeight * 72f / dpiY;
 
-            float margin = MmToPoints(marginMm);
-            float numberOffset = MmToPoints(numberOffsetMm);
+        float pageWidth;
+        float pageHeight;
 
-            bool isOneToOne = pageSizeOption?.Equals("1_1", StringComparison.OrdinalIgnoreCase) == true;
-            bool isAuto = pageSizeOption?.Equals("auto", StringComparison.OrdinalIgnoreCase) == true;
-            bool useFitWidth = fitWidth.HasValue;
+        float margin = MmToPoints(marginMm);
+        float numberOffset = MmToPoints(numberOffsetMm);
 
-            // -------- PAGE SIZE LOGIC --------
+        bool isOneToOne = pageSizeOption?.Equals("1_1", StringComparison.OrdinalIgnoreCase) == true;
+        bool isAuto = pageSizeOption?.Equals("auto", StringComparison.OrdinalIgnoreCase) == true;
+        bool useFitWidth = fitWidth.HasValue;
 
-            if (useFitWidth)
+        // -------- PAGE SIZE LOGIC --------
+
+        if (useFitWidth)
+        {
+            float targetWidthPts = MmToPoints(fitWidth.Value);
+            float imgShort = Math.Min(imageWidthPts, imageHeightPts);
+            float imgLong = Math.Max(imageWidthPts, imageHeightPts);
+            float ratio = imgLong / imgShort;
+
+            pageWidth = targetWidthPts;
+            pageHeight = targetWidthPts * ratio;
+        }
+        else if (isOneToOne)
+        {
+            float imgShort = Math.Min(imageWidthPts, imageHeightPts);
+            float imgLong = Math.Max(imageWidthPts, imageHeightPts);
+
+            pageWidth = imgShort + (margin * 2);
+            pageHeight = imgLong + (margin * 2);
+        }
+        else if (!string.IsNullOrEmpty(pageSizeOption) && !isAuto)
+        {
+            if (!PaperSizes.ContainsKey(pageSizeOption))
+                throw new Exception($"Unsupported page size: {pageSizeOption}");
+
+            var paper = PaperSizes[pageSizeOption];
+            pageWidth = MmToPoints(Math.Min(paper.WidthMm, paper.HeightMm));
+            pageHeight = MmToPoints(Math.Max(paper.WidthMm, paper.HeightMm));
+        }
+        else
+        {
+            pageWidth = Math.Min(imageWidthPts, imageHeightPts);
+            pageHeight = Math.Max(imageWidthPts, imageHeightPts);
+
+            if (isAuto)
             {
-                float targetWidthPts = MmToPoints(fitWidth.Value);
-                float imgShort = Math.Min(imageWidthPts, imageHeightPts);
-                float imgLong = Math.Max(imageWidthPts, imageHeightPts);
-                float ratio = imgLong / imgShort;
-
-                pageWidth = targetWidthPts;
-                pageHeight = targetWidthPts * ratio;
-            }
-            else if (isOneToOne)
-            {
-                float imgShort = Math.Min(imageWidthPts, imageHeightPts);
-                float imgLong = Math.Max(imageWidthPts, imageHeightPts);
-
-                pageWidth = imgShort + (margin * 2);
-                pageHeight = imgLong + (margin * 2);
-            }
-            else if (!string.IsNullOrEmpty(pageSizeOption) && !isAuto)
-            {
-                if (!PaperSizes.ContainsKey(pageSizeOption))
-                    throw new Exception($"Unsupported page size: {pageSizeOption}");
-
-                var paper = PaperSizes[pageSizeOption];
-                pageWidth = MmToPoints(Math.Min(paper.WidthMm, paper.HeightMm));
-                pageHeight = MmToPoints(Math.Max(paper.WidthMm, paper.HeightMm));
-            }
-            else
-            {
-                pageWidth = Math.Min(imageWidthPts, imageHeightPts);
-                pageHeight = Math.Max(imageWidthPts, imageHeightPts);
-
-                if (isAuto)
+                foreach (var paper in PaperSizes)
                 {
-                    foreach (var paper in PaperSizes)
-                    {
-                        float paperW = MmToPoints(paper.Value.WidthMm);
-                        float paperH = MmToPoints(paper.Value.HeightMm);
+                    float paperW = MmToPoints(paper.Value.WidthMm);
+                    float paperH = MmToPoints(paper.Value.HeightMm);
 
-                        if (IsPaperMatch(pageWidth, pageHeight, paperW, paperH, percentThreshold))
-                        {
-                            pageWidth = Math.Min(paperW, paperH);
-                            pageHeight = Math.Max(paperW, paperH);
-                            break;
-                        }
+                    if (IsPaperMatch(pageWidth, pageHeight, paperW, paperH, percentThreshold))
+                    {
+                        pageWidth = Math.Min(paperW, paperH);
+                        pageHeight = Math.Max(paperW, paperH);
+                        break;
                     }
                 }
             }
+        }
 
-            var page = pdf.AddNewPage(new PageSize(pageWidth, pageHeight));
-            pageNumber++;
+        var page = pdf.AddNewPage(new PageSize(pageWidth, pageHeight));
+        pageNumber++;
 
-            var canvas = new PdfCanvas(page);
+        var canvas = new PdfCanvas(page);
 
-            bool isLandscape = imageWidthPts > imageHeightPts;
+        bool isLandscape = imageWidthPts > imageHeightPts;
 
-            float availableWidth = pageWidth - (margin * 2);
-            float availableHeight = pageHeight - (margin * 2);
+        float availableWidth = pageWidth - (margin * 2);
+        float availableHeight = pageHeight - (margin * 2);
 
-            bool allowStretch = stretch;
-            if (isOneToOne)
-                allowStretch = false;
+        bool allowStretch = stretch;
+        if (isOneToOne)
+            allowStretch = false;
 
-            float drawWidth;
-            float drawHeight;
+        float drawWidth;
+        float drawHeight;
 
-            if (!isLandscape)
+        if (!isLandscape)
+        {
+            if (!allowStretch)
             {
-                if (!allowStretch)
-                {
-                    float scale = Math.Min(
-                        availableWidth / imageWidthPts,
-                        availableHeight / imageHeightPts);
+                float scale = Math.Min(
+                    availableWidth / imageWidthPts,
+                    availableHeight / imageHeightPts);
 
-                    drawWidth = imageWidthPts * scale;
-                    drawHeight = imageHeightPts * scale;
-                }
-                else
-                {
-                    drawWidth = availableWidth;
-                    drawHeight = availableHeight;
-                }
-
-                float x = (pageWidth - drawWidth) / 2;
-                float y = (pageHeight - drawHeight) / 2;
-
-                canvas.AddImageFittedIntoRectangle(
-                    imageData,
-                    new Rectangle(x, y, drawWidth, drawHeight),
-                    false);
+                drawWidth = imageWidthPts * scale;
+                drawHeight = imageHeightPts * scale;
             }
             else
             {
-                float rotatedW = imageHeightPts;
-                float rotatedH = imageWidthPts;
-
-                if (!allowStretch)
-                {
-                    float scale = Math.Min(
-                        availableWidth / rotatedW,
-                        availableHeight / rotatedH);
-
-                    drawWidth = rotatedW * scale;
-                    drawHeight = rotatedH * scale;
-                }
-                else
-                {
-                    drawWidth = availableWidth;
-                    drawHeight = availableHeight;
-                }
-
-                float x = (pageWidth - drawWidth) / 2;
-                float y = (pageHeight - drawHeight) / 2;
-
-                canvas.SaveState();
-                canvas.ConcatMatrix(0, 1, -1, 0, x + drawWidth, y);
-
-                canvas.AddImageFittedIntoRectangle(
-                    imageData,
-                    new Rectangle(0, 0, drawHeight, drawWidth),
-                    false);
-
-                canvas.RestoreState();
+                drawWidth = availableWidth;
+                drawHeight = availableHeight;
             }
 
-            canvas.BeginText();
-            canvas.SetFontAndSize(font, fontSize);
-            canvas.SetFillColor(ColorConstants.GRAY);
-            canvas.MoveText(numberOffset, numberOffset);
-            canvas.ShowText(pageNumber.ToString());
-            canvas.EndText();
+            float x = (pageWidth - drawWidth) / 2;
+            float y = (pageHeight - drawHeight) / 2;
+
+            canvas.AddImageFittedIntoRectangle(
+                imageData,
+                new Rectangle(x, y, drawWidth, drawHeight),
+                false);
+        }
+        else
+        {
+            float rotatedW = imageHeightPts;
+            float rotatedH = imageWidthPts;
+
+            if (!allowStretch)
+            {
+                float scale = Math.Min(
+                    availableWidth / rotatedW,
+                    availableHeight / rotatedH);
+
+                drawWidth = rotatedW * scale;
+                drawHeight = rotatedH * scale;
+            }
+            else
+            {
+                drawWidth = availableWidth;
+                drawHeight = availableHeight;
+            }
+
+            float x = (pageWidth - drawWidth) / 2;
+            float y = (pageHeight - drawHeight) / 2;
+
+            canvas.SaveState();
+            canvas.ConcatMatrix(0, 1, -1, 0, x + drawWidth, y);
+
+            canvas.AddImageFittedIntoRectangle(
+                imageData,
+                new Rectangle(0, 0, drawHeight, drawWidth),
+                false);
+
+            canvas.RestoreState();
+        }
+
+        canvas.BeginText();
+        canvas.SetFontAndSize(font, fontSize);
+        canvas.SetFillColor(ColorConstants.GRAY);
+        canvas.MoveText(numberOffset, numberOffset);
+        canvas.ShowText(pageNumber.ToString());
+        canvas.EndText();
     }
-    static void CreatePdfFromImages(
+   
+   static void CreatePdfFromFiles(
         string folder,
         string outputPdf,
         float marginMm,
@@ -415,7 +420,7 @@ class Program
 
         foreach (var file in supportedFiles)
         {
-            if (file.EndsWith(PDF_EXTENSION)==false) AddPageFromImage(file,ref pageNumber, writer, pdf, font);
+            if (file.EndsWith(PDF_EXTENSION) == false) AddPageFromImage(file, ref pageNumber, writer, pdf, font);
             else AddPagesFromPdf(file, ref pageNumber, writer, pdf, font);
         }
     }

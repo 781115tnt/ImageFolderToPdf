@@ -1,116 +1,182 @@
-IMG2PDF – CURRENT AVAILABLE ARGUMENTS
-======================================
+FILE2PDF – Command Line Argument Summary
+========================================
 
-REQUIRED ARGUMENTS
+Basic usage
+-----------
+-command=file2pdf -input=FOLDER -output=FILE.pdf [options]
+
+Example
+-------
+-command=file2pdf -input="D:\scans" -output="book.pdf" -pagesize=A4 -margin=10
+
+
+Required Arguments
 ------------------
--command=img2pdf
-    Must be exactly "img2pdf"
 
--input=PATH
-    Folder containing images
+-command=file2pdf
+    Runs the file → PDF conversion pipeline.
 
--output=FILE.pdf
-    Output PDF file path
+-input=folder
+    Folder containing images and/or PDFs.
 
+-output=file.pdf
+    Output PDF file path.
 
-OPTIONAL ARGUMENTS
-==================
+Supported input file types
+--------------------------
+jpg
+jpeg
+png
+bmp
+gif
+tif
+tiff
+webp
+pdf
 
--pageSize=VALUE
----------------
-Controls page sizing mode.
-
-Supported values:
-    A5, A4, A3, A2, A1, A0, 2A0
-        → Force all pages to that ISO size (portrait)
-
-    1_1
-        → Page size = image physical size + margin
-
-    auto
-        → Snap to ISO paper if within threshold
-
-    (not provided)
-        → Default = image physical size
+Files are processed in natural filename order:
+1, 2, 3, 10 (not 1, 10, 2).
 
 
--percentThreshold=NUMBER
-------------------------
-Used only with:
-    -pageSize=auto
-
-Default: 5
-
-If image physical size differs from ISO paper by less than this percentage,
-that ISO size will be used.
-
-
--fitWidth=MM
-------------
-Example:
-    -fitWidth=250
-
-Meaning:
-    Page width = 250 mm (portrait width)
-    Page height = proportional to image
-    Margin works
-    Stretch works
-    Ignores pageSize
-    Ignores auto mode
-
-NOTE:
-    This is the highest priority layout mode.
-
-
--margin=MM
-----------
-Default: 8
-
-Controls margin on all sides.
-
-Works in all modes.
-In 1_1 mode, page expands to include margin.
-
-
--stretch=y
-----------
-If set:
-    Image is stretched to fill available margin rectangle.
-
-If not set:
-    Image is scaled proportionally.
-
-Disabled automatically when:
-    -pageSize=1_1
-
-
--numberOffset=MM
+Layout Arguments
 ----------------
-Default: 4
 
-Distance from bottom-left corner for page number.
+-pagesize
+    Controls output page size.
+
+    Examples
+    -pagesize=A4
+    -pagesize=A3
+    -pagesize=A0
+    -pagesize=auto
+    -pagesize=1_1
+
+    Behavior
+    A5–2A0   → Force fixed ISO paper size
+    auto     → Detect closest A-series paper
+    1_1      → Page size = content size + margins
+    omitted  → Uses source size
 
 
-PAGE SIZE PRIORITY ORDER
-=========================
-Highest → Lowest
+-fitwidth
+    Scale pages so the short side equals this width (mm).
 
-1) -fitWidth
-2) -pageSize=1_1
-3) -pageSize=A4 (or other ISO)
-4) -pageSize=auto
-5) Default → image physical size
+    Example
+    -fitwidth=210
+
+    Useful for
+    • normalizing mixed scans
+    • consistent book pages
+    • printing layouts
+
+    Overrides normal page sizing.
 
 
-FULL ARGUMENT SUMMARY
-=====================
+-margin
+    Page margin in millimeters.
 
--command=img2pdf
--input=PATH
--output=FILE.pdf
--pageSize=A4|A3|A2|A1|A0|2A0|1_1|auto
--fitWidth=MM
--percentThreshold=NUMBER
--margin=MM
--stretch=y
--numberOffset=MM
+    Default
+    8
+
+    Example
+    -margin=15
+
+
+-stretch
+    Allow stretching to fill the page.
+
+    -stretch=y
+    -stretch=n
+
+    Behavior
+    y → Fill page area
+    n → Preserve aspect ratio
+
+    Default
+    y
+
+
+-percentthreshold
+    Used only when pagesize=auto.
+
+    Defines tolerance when matching A-series paper.
+
+    Example
+    -percentthreshold=5
+
+    Meaning
+    5% size difference allowed
+
+    Default
+    5
+
+
+Page Number Arguments
+---------------------
+
+-numberoffset
+    Distance of page number from bottom-left corner (mm).
+
+    Example
+    -numberoffset=6
+
+    Default
+    4
+
+
+Example Commands
+----------------
+
+Simple conversion
+-command=file2pdf -input=images -output=out.pdf
+
+
+Book scanning workflow
+-command=file2pdf -input=scans -output=book.pdf -pagesize=A4 -margin=12 -stretch=n
+
+
+Normalize mixed scans
+-command=file2pdf -input=scans -output=normalized.pdf -fitwidth=210
+
+
+Auto detect paper
+-command=file2pdf -input=scans -output=print.pdf -pagesize=auto
+
+
+Internal Processing Pipeline
+----------------------------
+Scan folder
+↓
+Sort filenames naturally
+↓
+Detect file type
+↓
+Image → layout engine
+PDF   → layout engine
+↓
+Fit into page
+↓
+Add page number
+↓
+Write final PDF
+
+
+Defaults (if not specified)
+---------------------------
+
+margin             = 8 mm
+numberoffset       = 4 mm
+stretch            = true
+percentthreshold   = 5
+pagesize           = A4
+font               = Arial
+fontsize           = 5
+
+
+Typical Uses
+------------
+• scan-to-PDF workflows
+• comic / manga conversion
+• document normalization
+• print preparation
+• merging images and PDFs
