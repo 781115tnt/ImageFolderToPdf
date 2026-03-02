@@ -35,16 +35,19 @@ class Program
     };
 
     static readonly Dictionary<string, (float WidthMm, float HeightMm)> PaperSizes =
-        new(StringComparer.OrdinalIgnoreCase)
-        {
-            { "A5", (148, 210) },
-            { "A4", (210, 297) },
-            { "A3", (297, 420) },
-            { "A2", (420, 594) },
-            { "A1", (594, 841) },
-            { "A0", (841, 1189) },
-            { "2A0",(1189,1682) }
-        };
+    new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "A5", (148, 210) },
+        { "A4", (210, 297) },
+        { "A3", (297, 420) },
+        { "A2", (420, 594) },
+        { "A1", (594, 841) },
+        { "A0", (841, 1189) },
+        { "2A0",(1189,1682) }
+    };
+
+    static Dictionary<string, List<int>> pageSizeReport =
+    new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
 
     static string folder = "";
     static string outputPdf = "";
@@ -110,6 +113,88 @@ class Program
         Console.WriteLine("Done.");
         return 0;
     }
+
+
+    static void RegisterPageSize(float widthPts, float heightPts, int pageNumber)
+    {
+        float wMm = widthPts * 25.4f / 72f;
+        float hMm = heightPts * 25.4f / 72f;
+
+        float shortSide = Math.Min(wMm, hMm);
+        float longSide = Math.Max(wMm, hMm);
+
+        const float toleranceMm = 2f; // allow small rounding differences
+
+        string sizeLabel = null;
+
+        foreach (var kv in PaperSizes)
+        {
+            float paperShort = Math.Min(kv.Value.WidthMm, kv.Value.HeightMm);
+            float paperLong = Math.Max(kv.Value.WidthMm, kv.Value.HeightMm);
+
+            if (Math.Abs(shortSide - paperShort) <= toleranceMm &&
+                Math.Abs(longSide - paperLong) <= toleranceMm)
+            {
+                sizeLabel = $"{kv.Key} ({paperShort}x{paperLong} mm)";
+                break;
+            }
+        }
+
+        // If no ISO match, use raw size
+        if (sizeLabel == null)
+        {
+            sizeLabel = $"{Math.Round(shortSide)}x{Math.Round(longSide)} mm";
+        }
+
+        if (!pageSizeReport.ContainsKey(sizeLabel))
+            pageSizeReport[sizeLabel] = new List<int>();
+
+        pageSizeReport[sizeLabel].Add(pageNumber);
+    }
+
+    static void WritePageSizeReport(string pdfPath)
+    {
+        string txtPath = IOPath.ChangeExtension(pdfPath, ".txt");
+
+        using var writer = new StreamWriter(txtPath);
+
+        writer.WriteLine("PAGE SIZE REPORT");
+        writer.WriteLine("================");
+        writer.WriteLine();
+
+        foreach (var kv in pageSizeReport
+            .OrderBy(k => k.Key))
+        {
+            writer.WriteLine($"Page Size: {kv.Key}");
+            writer.WriteLine($"Total Pages: {kv.Value.Count}");
+            writer.WriteLine($"Pages: {string.Join(", ", kv.Value)}");
+            writer.WriteLine();
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     static void CalculatePageSize(ref float imageWidthPts, ref float imageHeightPts, out float pageWidth, out float pageHeight)
     {
@@ -196,6 +281,11 @@ class Program
             var newPage = pdf.AddNewPage(new PageSize(pageWidth, pageHeight));
             pageNumber++;
 
+
+            RegisterPageSize(pageWidth, pageHeight, pageNumber);
+
+
+
             var canvas = new PdfCanvas(newPage);
 
             float availableWidth = pageWidth - (margin * 2);
@@ -255,6 +345,14 @@ class Program
 
         var page = pdf.AddNewPage(new PageSize(pageWidth, pageHeight));
         pageNumber++;
+
+
+
+        RegisterPageSize(pageWidth, pageHeight, pageNumber);
+
+
+
+
 
         var canvas = new PdfCanvas(page);
 
@@ -372,6 +470,7 @@ class Program
             if (file.EndsWith(PDF_EXTENSION) == false) AddPageFromImage(file, ref pageNumber, writer, pdf, font, addPageNumber);
             else AddPagesFromPdf(file, ref pageNumber, writer, pdf, font, addPageNumber);
         }
+        WritePageSizeReport(outputPdf);
     }
 
     static void CreatePdfFromFilesNoFormat(
@@ -486,6 +585,7 @@ class Program
                     }
                 }
             }
+
         }
     }
     static bool IsPaperMatch(
