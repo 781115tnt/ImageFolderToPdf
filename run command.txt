@@ -1,54 +1,116 @@
-Required:
+IMG2PDF – CURRENT AVAILABLE ARGUMENTS
+======================================
+
+REQUIRED ARGUMENTS
+------------------
 -command=img2pdf
     Must be exactly "img2pdf"
 
--input="folder_path"
-    Path to folder containing images
+-input=PATH
+    Folder containing images
 
--output="output_file.pdf"
+-output=FILE.pdf
     Output PDF file path
 
 
-Optional:
-
--margin=NUMBER
-    Page margin in millimeters
-    Default: 8
-
--numberOffset=NUMBER
-    Distance from bottom-left corner for page number (mm)
-    Default: 4
-
--stretch=y
-    Force image to fill available area (distort allowed)
-    Default: disabled
-
--percentThreshold=NUMBER
-    Used only with -pageSize=auto
-    If image size difference from ISO paper size is within this percent,
-    snap page size to that ISO size
-    Default: 5
+OPTIONAL ARGUMENTS
+==================
 
 -pageSize=VALUE
-    Supported values:
+---------------
+Controls page sizing mode.
+
+Supported values:
+    A5, A4, A3, A2, A1, A0, 2A0
+        → Force all pages to that ISO size (portrait)
 
     1_1
-        Page size = image size + 2×margin
-        Stretch disabled automatically
+        → Page size = image physical size + margin
 
     auto
-        Try to match ISO paper size (A5–2A0) within percentThreshold
+        → Snap to ISO paper if within threshold
 
-    A5
-    A4
-    A3
-    A2
-    A1
-    A0
-    2A0
-        Force fixed ISO paper size
+    (not provided)
+        → Default = image physical size
 
--fitWidth=NUMBER
-    Force page width (in mm)
-    Page height calculated proportionally
-    Overrides pageSize and auto
+
+-percentThreshold=NUMBER
+------------------------
+Used only with:
+    -pageSize=auto
+
+Default: 5
+
+If image physical size differs from ISO paper by less than this percentage,
+that ISO size will be used.
+
+
+-fitWidth=MM
+------------
+Example:
+    -fitWidth=250
+
+Meaning:
+    Page width = 250 mm (portrait width)
+    Page height = proportional to image
+    Margin works
+    Stretch works
+    Ignores pageSize
+    Ignores auto mode
+
+NOTE:
+    This is the highest priority layout mode.
+
+
+-margin=MM
+----------
+Default: 8
+
+Controls margin on all sides.
+
+Works in all modes.
+In 1_1 mode, page expands to include margin.
+
+
+-stretch=y
+----------
+If set:
+    Image is stretched to fill available margin rectangle.
+
+If not set:
+    Image is scaled proportionally.
+
+Disabled automatically when:
+    -pageSize=1_1
+
+
+-numberOffset=MM
+----------------
+Default: 4
+
+Distance from bottom-left corner for page number.
+
+
+PAGE SIZE PRIORITY ORDER
+=========================
+Highest → Lowest
+
+1) -fitWidth
+2) -pageSize=1_1
+3) -pageSize=A4 (or other ISO)
+4) -pageSize=auto
+5) Default → image physical size
+
+
+FULL ARGUMENT SUMMARY
+=====================
+
+-command=img2pdf
+-input=PATH
+-output=FILE.pdf
+-pageSize=A4|A3|A2|A1|A0|2A0|1_1|auto
+-fitWidth=MM
+-percentThreshold=NUMBER
+-margin=MM
+-stretch=y
+-numberOffset=MM

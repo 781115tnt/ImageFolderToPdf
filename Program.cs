@@ -11,10 +11,12 @@ using iText.IO.Font;
 using iText.IO.Image;
 using iText.Kernel.Geom;
 using iText.Kernel.Pdf.Canvas;
+using System.Text.RegularExpressions;
 
 class Program
 {
-    static readonly string[] ImageExtensions =
+    static readonly HashSet<string> ImageExtensions =
+        new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff", ".webp"
     };
@@ -92,8 +94,15 @@ class Program
         var images = Directory
             .EnumerateFiles(folder)
             .Where(f => ImageExtensions.Contains(IOPath.GetExtension(f).ToLower()))
-            .OrderBy(f => f)
+            .OrderBy(f => NaturalKey(f))
+            .ThenBy(f => f)
             .ToList();
+        
+        if (!images.Any())
+        {
+            Console.WriteLine("No supported images found.");
+            return;
+        }
 
         using var writer = new PdfWriter(outputPdf);
         using var pdf = new PdfDocument(writer);
@@ -301,5 +310,12 @@ class Program
         }
 
         return dict;
+    }
+
+    static string NaturalKey(string path)
+    {
+        string name = IOPath.GetFileNameWithoutExtension(path);
+
+        return Regex.Replace(name, @"\d+", m => m.Value.PadLeft(20, '0'));
     }
 }

@@ -1,237 +1,116 @@
-dotnet run -- ^
--command=img2pdf ^
--input="D:\PythonScript\TEST\_IM\fs afda (5)" ^
--output="D:\PythonScript\TEST\new.pdf" ^
--margin=8 ^
--numberOffset=4 ^
--stretch=y
--pageSize=auto
+IMG2PDF – CURRENT AVAILABLE ARGUMENTS
+======================================
 
-dotnet run -- -command=img2pdf -input="D:\PythonScript\TEST\_IM\fs afda (5)" -output="D:\PythonScript\TEST\new.pdf" -margin=8 -numberOffset=4 -stretch=y -pageSize=auto -pageSize=auto
-
-
-dotnet run -- ^
--command=img2pdf ^
--input="D:\PythonScript\TEST\_IM\fs afda (5)" ^
--output="D:\PythonScript\TEST\new.pdf" ^
--margin=8 ^
--numberOffset=4 ^
--stretch=y ^
--pageSize=auto ^
--percentThreshold=1
-
-
-
-
-dotnet run -- ^
--command=img2pdf ^
--input="D:\PythonScript\TEST\_IM\fs afda (5)" ^
--output="D:\PythonScript\TEST\new.pdf" ^
--pageSize=A4 ^
--margin=10 ^
--stretch=n
-
-dotnet run -- ^
--command=img2pdf ^
--input="D:\PythonScript\TEST\_IM\fs afda (5)" ^
--output="D:\PythonScript\TEST\new.pdf" ^
--pageSize=1_1
-
-
-dotnet run -- ^
--command=img2pdf ^
--input="D:\PythonScript\TEST\_IM\fs afda (5)" ^
--output="D:\PythonScript\TEST\new.pdf" ^
--fitWidth=250 ^
--margin=10
-
-
-
-################################################################################
-
-ALL SUPPORTED ARGUMENTS (FINAL VERSION)
-
-────────────────────────────────────
 REQUIRED ARGUMENTS
-────────────────────────────────────
-
+------------------
 -command=img2pdf
-    Required. Must be exactly "img2pdf".
+    Must be exactly "img2pdf"
 
--input="folderPath"
-    Required. Folder containing images.
+-input=PATH
+    Folder containing images
 
--output="file.pdf"
-    Required. Output PDF file path.
+-output=FILE.pdf
+    Output PDF file path
 
 
-────────────────────────────────────
-PAGE SIZE CONTROL
-────────────────────────────────────
+OPTIONAL ARGUMENTS
+==================
 
 -pageSize=VALUE
+---------------
+Controls page sizing mode.
 
 Supported values:
+    A5, A4, A3, A2, A1, A0, 2A0
+        → Force all pages to that ISO size (portrait)
 
-A5
-A4
-A3
-A2
-A1
-A0
-2A0
-    Force all pages to that ISO size (portrait normalized).
+    1_1
+        → Page size = image physical size + margin
 
-1_1
-    Exact image physical size.
-    - Margin forced to 0
-    - Stretch disabled
-    - True 1:1 output
+    auto
+        → Snap to ISO paper if within threshold
 
-auto
-    Automatically snap to ISO size if within threshold.
-    Uses -percentThreshold.
-
-If omitted:
-    Default = image physical size.
+    (not provided)
+        → Default = image physical size
 
 
--percentThreshold=5
-
-Used ONLY with:
+-percentThreshold=NUMBER
+------------------------
+Used only with:
     -pageSize=auto
 
-Meaning:
-    If image short/long sides are within X% of ISO paper,
-    snap to that paper size.
+Default: 5
 
-Default:
-    5
+If image physical size differs from ISO paper by less than this percentage,
+that ISO size will be used.
 
 
-────────────────────────────────────
-FIT MODE
-────────────────────────────────────
-
--fitWidth=250
-
-Highest priority mode.
+-fitWidth=MM
+------------
+Example:
+    -fitWidth=250
 
 Meaning:
-    Page width = 250 mm
+    Page width = 250 mm (portrait width)
     Page height = proportional to image
     Margin works
     Stretch works
-    pageSize ignored
-    percentThreshold ignored
+    Ignores pageSize
+    Ignores auto mode
 
-Unit:
-    Millimeters
-
-
-────────────────────────────────────
-MARGIN & PAGE NUMBER
-────────────────────────────────────
-
--margin=8
-
-Page margin in millimeters.
-
-Default:
-    8
-
-Ignored in:
-    -pageSize=1_1
+NOTE:
+    This is the highest priority layout mode.
 
 
--numberOffset=4
+-margin=MM
+----------
+Default: 8
 
-Distance (mm) from bottom-left for page number.
+Controls margin on all sides.
 
-Default:
-    4
+Works in all modes.
+In 1_1 mode, page expands to include margin.
 
-
-────────────────────────────────────
-IMAGE SCALING
-────────────────────────────────────
 
 -stretch=y
+----------
+If set:
+    Image is stretched to fill available margin rectangle.
 
-If set to y:
-    Image fills available rectangle.
-    Aspect ratio NOT preserved.
+If not set:
+    Image is scaled proportionally.
 
-If omitted:
-    Proportional scaling.
-    Aspect ratio preserved.
-
-Automatically disabled in:
+Disabled automatically when:
     -pageSize=1_1
 
-Works in:
-    pageSize=A4
-    pageSize=auto
-    fitWidth
-    default image mode
+
+-numberOffset=MM
+----------------
+Default: 4
+
+Distance from bottom-left corner for page number.
 
 
-────────────────────────────────────
-SUPPORTED ISO PAPER SIZES
-────────────────────────────────────
+PAGE SIZE PRIORITY ORDER
+=========================
+Highest → Lowest
 
-A5
-A4
-A3
-A2
-A1
-A0
-2A0
-
-All portrait-normalized automatically.
+1) -fitWidth
+2) -pageSize=1_1
+3) -pageSize=A4 (or other ISO)
+4) -pageSize=auto
+5) Default → image physical size
 
 
-────────────────────────────────────
-PRIORITY ORDER (IMPORTANT)
-────────────────────────────────────
-
-1. -fitWidth
-2. -pageSize=1_1
-3. -pageSize=A4 (or other ISO)
-4. -pageSize=auto
-5. default → image size
-
-
-────────────────────────────────────
-EXAMPLE USAGE
-────────────────────────────────────
-
-Auto snap to paper:
--pageSize=auto -percentThreshold=3
-
-Force A4 and stretch:
--pageSize=A4 -stretch=y
-
-Exact physical size:
--pageSize=1_1
-
-Fit to 250mm width with stretch:
--fitWidth=250 -stretch=y
-
-
-────────────────────────────────────
-COMPLETE ARGUMENT LIST
-────────────────────────────────────
+FULL ARGUMENT SUMMARY
+=====================
 
 -command=img2pdf
--input=...
--output=...
--pageSize=...
--percentThreshold=...
--fitWidth=...
--margin=...
--numberOffset=...
+-input=PATH
+-output=FILE.pdf
+-pageSize=A4|A3|A2|A1|A0|2A0|1_1|auto
+-fitWidth=MM
+-percentThreshold=NUMBER
+-margin=MM
 -stretch=y
-
-
-
+-numberOffset=MM
