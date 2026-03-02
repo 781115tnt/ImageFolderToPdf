@@ -11,14 +11,26 @@ using iText.IO.Font;
 using iText.IO.Image;
 using iText.Kernel.Geom;
 using iText.Kernel.Pdf.Canvas;
-using System.Text.RegularExpressions;
+
+using System.Runtime.InteropServices;
+
+class NaturalSortComparer : IComparer<string>
+{
+    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
+    static extern int StrCmpLogicalW(string x, string y);
+
+    public int Compare(string x, string y)
+    {
+        return StrCmpLogicalW(x, y);
+    }
+}
 
 class Program
 {
-    static readonly HashSet<string> ImageExtensions =
-        new(StringComparer.OrdinalIgnoreCase)
+    const string PDF_EXTENSION = ".pdf";
+    static readonly string[] ImageExtensions =
     {
-        ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff", ".webp"
+        ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff", ".webp", PDF_EXTENSION
     };
 
     static readonly Dictionary<string, (float WidthMm, float HeightMm)> PaperSizes =
@@ -32,6 +44,18 @@ class Program
         { "A0", (841, 1189) },
         { "2A0",(1189,1682) }
     };
+        static string folder="";
+        static string outputPdf="";
+
+        static float marginMm = 8f;
+        static float numberOffsetMm = 4f;
+        static bool stretch = true;
+        static float percentThreshold = 5f;
+        static string pageSizeOption="A4";
+        static float? fitWidth = 210f;
+
+        static string fontPath = @"C:\Windows\Fonts\arial.ttf";
+        static float fontSize = 5f;
 
     static int Main(string[] args)
     {
@@ -49,18 +73,18 @@ class Program
             return 1;
         }
 
-        string folder = options["input"];
-        string outputPdf = options["output"];
+        folder = options["input"];
+        outputPdf = options["output"];
 
-        float marginMm = options.ContainsKey("margin") ? float.Parse(options["margin"]) : 8f;
-        float numberOffsetMm = options.ContainsKey("numberoffset") ? float.Parse(options["numberoffset"]) : 4f;
-        bool stretch = options.ContainsKey("stretch") && options["stretch"].ToLower() == "y";
-        float percentThreshold = options.ContainsKey("percentthreshold") ? float.Parse(options["percentthreshold"]) : 5f;
-        string pageSizeOption = options.ContainsKey("pagesize") ? options["pagesize"] : null;
-        float? fitWidth = options.ContainsKey("fitwidth") ? float.Parse(options["fitwidth"]) : null;
+        marginMm = options.ContainsKey("margin") ? float.Parse(options["margin"]) : 8f;
+        numberOffsetMm = options.ContainsKey("numberoffset") ? float.Parse(options["numberoffset"]) : 4f;
+        stretch = options.ContainsKey("stretch") && options["stretch"].ToLower() == "y";
+        percentThreshold = options.ContainsKey("percentthreshold") ? float.Parse(options["percentthreshold"]) : 5f;
+        pageSizeOption = options.ContainsKey("pagesize") ? options["pagesize"] : null;
+        fitWidth = options.ContainsKey("fitwidth") ? float.Parse(options["fitwidth"]) : null;
 
-        string fontPath = @"C:\Windows\Fonts\arial.ttf";
-        float fontSize = 5f;
+        fontPath = @"C:\Windows\Fonts\arial.ttf";
+        fontSize = 5f;
 
         CreatePdfFromImages(
             folder,
@@ -78,46 +102,134 @@ class Program
         Console.WriteLine("Done.");
         return 0;
     }
-
-    static void CreatePdfFromImages(
-        string folder,
-        string outputPdf,
-        float marginMm,
-        string fontPath,
-        float fontSize,
-        float numberOffsetMm,
-        bool stretchImage,
-        float percentThreshold,
-        string pageSizeOption,
-        float? fitWidth)
+    static void AddPagesFromPdf(string file, ref int pageNumber, PdfWriter writer, PdfDocument pdf, PdfFont font)
     {
-        var images = Directory
-            .EnumerateFiles(folder)
-            .Where(f => ImageExtensions.Contains(IOPath.GetExtension(f).ToLower()))
-            .OrderBy(f => NaturalKey(f))
-            .ThenBy(f => f)
-            .ToList();
-        
-        if (!images.Any())
+        using var src = new PdfDocument(new PdfReader(file));
+
+        for (int i = 1; i <= src.GetNumberOfPages(); i++)
         {
-            Console.WriteLine("No supported images found.");
-            return;
+            var srcPage = src.GetPage(i);
+            var srcSize = srcPage.GetPageSize();
+
+            float imageWidthPts = srcSize.GetWidth();
+            float imageHeightPts = srcSize.GetHeight();
+
+            float pageWidth;
+            float pageHeight;
+
+            float margin = MmToPoints(marginMm);
+            float numberOffset = MmToPoints(numberOffsetMm);
+
+            bool isOneToOne = pageSizeOption?.Equals("1_1", StringComparison.OrdinalIgnoreCase) == true;
+            bool isAuto = pageSizeOption?.Equals("auto", StringComparison.OrdinalIgnoreCase) == true;
+            bool useFitWidth = fitWidth.HasValue;
+
+            // -------- PAGE SIZE LOGIC (same as image) --------
+
+            if (useFitWidth)
+            {
+                float targetWidthPts = MmToPoints(fitWidth.Value);
+                float imgShort = Math.Min(imageWidthPts, imageHeightPts);
+                float imgLong = Math.Max(imageWidthPts, imageHeightPts);
+                float ratio = imgLong / imgShort;
+
+                pageWidth = targetWidthPts;
+                pageHeight = targetWidthPts * ratio;
+            }
+            else if (isOneToOne)
+            {
+                float imgShort = Math.Min(imageWidthPts, imageHeightPts);
+                float imgLong = Math.Max(imageWidthPts, imageHeightPts);
+
+                pageWidth = imgShort + (margin * 2);
+                pageHeight = imgLong + (margin * 2);
+            }
+            else if (!string.IsNullOrEmpty(pageSizeOption) && !isAuto)
+            {
+                if (!PaperSizes.ContainsKey(pageSizeOption))
+                    throw new Exception($"Unsupported page size: {pageSizeOption}");
+
+                var paper = PaperSizes[pageSizeOption];
+                pageWidth = MmToPoints(Math.Min(paper.WidthMm, paper.HeightMm));
+                pageHeight = MmToPoints(Math.Max(paper.WidthMm, paper.HeightMm));
+            }
+            else
+            {
+                pageWidth = Math.Min(imageWidthPts, imageHeightPts);
+                pageHeight = Math.Max(imageWidthPts, imageHeightPts);
+
+                if (isAuto)
+                {
+                    foreach (var paper in PaperSizes)
+                    {
+                        float paperW = MmToPoints(paper.Value.WidthMm);
+                        float paperH = MmToPoints(paper.Value.HeightMm);
+
+                        if (IsPaperMatch(pageWidth, pageHeight, paperW, paperH, percentThreshold))
+                        {
+                            pageWidth = Math.Min(paperW, paperH);
+                            pageHeight = Math.Max(paperW, paperH);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            var newPage = pdf.AddNewPage(new PageSize(pageWidth, pageHeight));
+            pageNumber++;
+
+            var canvas = new PdfCanvas(newPage);
+
+            float availableWidth = pageWidth - (margin * 2);
+            float availableHeight = pageHeight - (margin * 2);
+
+            bool allowStretch = stretch;
+            if (isOneToOne)
+                allowStretch = false;
+
+            float drawWidth;
+            float drawHeight;
+
+            bool isLandscape = imageWidthPts > imageHeightPts;
+
+            if (!allowStretch)
+            {
+                float scale = Math.Min(
+                    availableWidth / imageWidthPts,
+                    availableHeight / imageHeightPts);
+
+                drawWidth = imageWidthPts * scale;
+                drawHeight = imageHeightPts * scale;
+            }
+            else
+            {
+                drawWidth = availableWidth;
+                drawHeight = availableHeight;
+            }
+
+            float x = (pageWidth - drawWidth) / 2;
+            float y = (pageHeight - drawHeight) / 2;
+
+            var pageCopy = srcPage.CopyAsFormXObject(pdf);
+
+            canvas.AddXObjectFittedIntoRectangle(
+                pageCopy,
+                new Rectangle(x, y, drawWidth, drawHeight)
+            );
+
+            // page number
+            canvas.BeginText();
+            canvas.SetFontAndSize(font, fontSize);
+            canvas.SetFillColor(ColorConstants.GRAY);
+            canvas.MoveText(numberOffset, numberOffset);
+            canvas.ShowText(pageNumber.ToString());
+            canvas.EndText();
         }
-
-        using var writer = new PdfWriter(outputPdf);
-        using var pdf = new PdfDocument(writer);
-
-        PdfFont font = PdfFontFactory.CreateFont(
-            fontPath,
-            PdfEncodings.WINANSI,
-            PdfFontFactory.EmbeddingStrategy.PREFER_EMBEDDED
-        );
-
-        int pageNumber = 0;
-
-        foreach (var file in images)
-        {
-            var imageData = ImageDataFactory.Create(file);
+    }
+    static void AddPageFromImage(string image, ref int pageNumber, PdfWriter writer, PdfDocument pdf, PdfFont font)
+    {
+        
+            var imageData = ImageDataFactory.Create(image);
 
             float pixelWidth = imageData.GetWidth();
             float pixelHeight = imageData.GetHeight();
@@ -199,7 +311,7 @@ class Program
             float availableWidth = pageWidth - (margin * 2);
             float availableHeight = pageHeight - (margin * 2);
 
-            bool allowStretch = stretchImage;
+            bool allowStretch = stretch;
             if (isOneToOne)
                 allowStretch = false;
 
@@ -271,6 +383,40 @@ class Program
             canvas.MoveText(numberOffset, numberOffset);
             canvas.ShowText(pageNumber.ToString());
             canvas.EndText();
+    }
+    static void CreatePdfFromImages(
+        string folder,
+        string outputPdf,
+        float marginMm,
+        string fontPath,
+        float fontSize,
+        float numberOffsetMm,
+        bool stretch,
+        float percentThreshold,
+        string pageSizeOption,
+        float? fitWidth)
+    {
+        var supportedFiles = Directory
+            .EnumerateFiles(folder)
+            .Where(f => ImageExtensions.Contains(IOPath.GetExtension(f).ToLower()))
+            .OrderBy(f => IOPath.GetFileName(f), new NaturalSortComparer())
+            .ToList();
+
+        using var writer = new PdfWriter(outputPdf);
+        using var pdf = new PdfDocument(writer);
+
+        PdfFont font = PdfFontFactory.CreateFont(
+            fontPath,
+            PdfEncodings.WINANSI,
+            PdfFontFactory.EmbeddingStrategy.PREFER_EMBEDDED
+        );
+
+        int pageNumber = 0;
+
+        foreach (var file in supportedFiles)
+        {
+            if (file.EndsWith(PDF_EXTENSION)==false) AddPageFromImage(file,ref pageNumber, writer, pdf, font);
+            else AddPagesFromPdf(file, ref pageNumber, writer, pdf, font);
         }
     }
 
@@ -310,12 +456,5 @@ class Program
         }
 
         return dict;
-    }
-
-    static string NaturalKey(string path)
-    {
-        string name = IOPath.GetFileNameWithoutExtension(path);
-
-        return Regex.Replace(name, @"\d+", m => m.Value.PadLeft(20, '0'));
     }
 }
