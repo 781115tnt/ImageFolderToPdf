@@ -52,7 +52,7 @@ class Program
     static bool stretch = true;
     static float percentThreshold = 5f;
     static string pageSizeOption = "A4";
-    static float? fitWidth = 210f;
+    static float? pageWidth = 210f;
 
     static string fontPath = @"C:\Windows\Fonts\arial.ttf";
     static float fontSize = 5f;
@@ -81,7 +81,7 @@ class Program
         stretch = options.ContainsKey("stretch") && options["stretch"].ToLower() == "y";
         percentThreshold = options.ContainsKey("percentthreshold") ? float.Parse(options["percentthreshold"]) : 5f;
         pageSizeOption = options.ContainsKey("pagesize") ? options["pagesize"] : null;
-        fitWidth = options.ContainsKey("fitwidth") ? float.Parse(options["fitwidth"]) : null;
+        pageWidth = options.ContainsKey("pagewidth") ? float.Parse(options["pagewidth"]) : null;
 
         fontPath = @"C:\Windows\Fonts\arial.ttf";
         fontSize = 5f;
@@ -96,7 +96,7 @@ class Program
             stretch,
             percentThreshold,
             pageSizeOption,
-            fitWidth
+            pageWidth
         );
 
         Console.WriteLine("Done.");
@@ -127,16 +127,16 @@ class Program
 
             bool isOneToOne = pageSizeOption?.Equals("1_1", StringComparison.OrdinalIgnoreCase) == true;
             bool isAuto = pageSizeOption?.Equals("auto", StringComparison.OrdinalIgnoreCase) == true;
-            bool useFitWidth = fitWidth.HasValue;
+            bool usePageWidth = Program.pageWidth.HasValue;
 
             float pageWidth;
             float pageHeight;
 
             // -------- PAGE SIZE LOGIC (same as images) --------
 
-            if (useFitWidth)
+            if (usePageWidth)
             {
-                float targetWidthPts = MmToPoints(fitWidth.Value);
+                float targetWidthPts = MmToPoints(Program.pageWidth.Value);
 
                 float imgShort = Math.Min(imageWidthPts, imageHeightPts);
                 float imgLong = Math.Max(imageWidthPts, imageHeightPts);
@@ -257,13 +257,13 @@ class Program
 
         bool isOneToOne = pageSizeOption?.Equals("1_1", StringComparison.OrdinalIgnoreCase) == true;
         bool isAuto = pageSizeOption?.Equals("auto", StringComparison.OrdinalIgnoreCase) == true;
-        bool useFitWidth = fitWidth.HasValue;
+        bool usePageWidth = Program.pageWidth.HasValue;
 
         // -------- PAGE SIZE LOGIC --------
 
-        if (useFitWidth)
+        if (usePageWidth)
         {
-            float targetWidthPts = MmToPoints(fitWidth.Value);
+            float targetWidthPts = MmToPoints(Program.pageWidth.Value);
             float imgShort = Math.Min(imageWidthPts, imageHeightPts);
             float imgLong = Math.Max(imageWidthPts, imageHeightPts);
             float ratio = imgLong / imgShort;
@@ -406,7 +406,7 @@ class Program
          bool stretch,
          float percentThreshold,
          string pageSizeOption,
-         float? fitWidth)
+         float? pageWidth)
     {
         var supportedFiles = Directory
             .EnumerateFiles(folder)
@@ -445,12 +445,10 @@ class Program
         float papShort = Math.Min(paperW, paperH);
         float papLong = Math.Max(paperW, paperH);
 
-        // Allow cropped pages
-        float shortDiff = (papShort - imgShort) / papShort * 100f;
-        float longDiff = (papLong - imgLong) / papLong * 100f;
+        float shortDiff = Math.Abs(imgShort - papShort) / papShort * 100f;
+        float longDiff = Math.Abs(imgLong - papLong) / papLong * 100f;
 
-        return shortDiff >= 0 && longDiff >= 0 &&
-               shortDiff <= percentThreshold &&
+        return shortDiff <= percentThreshold &&
                longDiff <= percentThreshold;
     }
 
