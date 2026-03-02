@@ -1,182 +1,287 @@
-FILE2PDF – Command Line Argument Summary
-========================================
+FILE2PDF – COMPLETE ARGUMENT GUIDE
+==================================
 
-Basic usage
------------
+Basic Command
+-------------
 -command=file2pdf -input=FOLDER -output=FILE.pdf [options]
 
-Example
--------
--command=file2pdf -input="D:\scans" -output="book.pdf" -pagesize=A4 -margin=10
+
+Minimal Example
+---------------
+-command=file2pdf -input="D:\scans" -output="book.pdf"
 
 
-Required Arguments
-------------------
+Example With Options
+--------------------
+-command=file2pdf -input="D:\scans" -output="book.pdf" -pagesize=A4 -margin=10 -stretch=n
+
+
+==================================================
+REQUIRED ARGUMENTS
+==================================================
 
 -command=file2pdf
     Runs the file → PDF conversion pipeline.
 
 -input=folder
-    Folder containing images and/or PDFs.
+    Folder containing source files.
 
 -output=file.pdf
-    Output PDF file path.
-
-Supported input file types
---------------------------
-jpg
-jpeg
-png
-bmp
-gif
-tif
-tiff
-webp
-pdf
-
-Files are processed in natural filename order:
-1, 2, 3, 10 (not 1, 10, 2).
+    Output PDF file.
 
 
-Layout Arguments
-----------------
+==================================================
+SUPPORTED INPUT FILES
+==================================================
 
--pagesize
-    Controls output page size.
+.jpg
+.jpeg
+.png
+.bmp
+.gif
+.tif
+.tiff
+.webp
+.pdf
 
-    Examples
-    -pagesize=A4
-    -pagesize=A3
-    -pagesize=A0
-    -pagesize=auto
-    -pagesize=1_1
+Files are processed in NATURAL order:
 
-    Behavior
-    A5–2A0   → Force fixed ISO paper size
-    auto     → Detect closest A-series paper
-    1_1      → Page size = content size + margins
-    omitted  → Uses source size
+1.png
+2.png
+10.png
 
+not
 
--fitwidth
-    Scale pages so the short side equals this width (mm).
-
-    Example
-    -fitwidth=210
-
-    Useful for
-    • normalizing mixed scans
-    • consistent book pages
-    • printing layouts
-
-    Overrides normal page sizing.
+1.png
+10.png
+2.png
 
 
+==================================================
+LAYOUT OPTIONS
+==================================================
+
+-pagesize=value
+
+Defines the output page size.
+
+Possible values:
+
+A5
+A4
+A3
+A2
+A1
+A0
+2A0
+auto
+1_1
+
+Examples
+
+-pagesize=A4
+-pagesize=A3
+-pagesize=auto
+-pagesize=1_1
+
+
+Meaning
+
+A5–2A0
+    Forces a fixed ISO paper size.
+
+auto
+    Automatically detects closest A-series size.
+
+1_1
+    Page size equals content size plus margins.
+
+not provided
+    Uses original content size.
+
+
+
+==================================================
+-pagewidth
+==================================================
+
+Forces every page to have the same width (in millimeters).
+Height is automatically calculated to preserve aspect ratio.
+
+Example
+
+-pagewidth=210
+
+Useful for
+
+• books
+• consistent layouts
+• mixed page sizes
+• manga/comics
+
+
+
+==================================================
 -margin
-    Page margin in millimeters.
+==================================================
 
-    Default
-    8
+Page margin in millimeters.
 
-    Example
-    -margin=15
+Default
+8
+
+Example
+
+-margin=15
 
 
+
+==================================================
 -stretch
-    Allow stretching to fill the page.
+==================================================
 
-    -stretch=y
-    -stretch=n
+Controls whether the content fills the page area.
 
-    Behavior
-    y → Fill page area
-    n → Preserve aspect ratio
+Values
 
-    Default
-    y
+-stretch=y
+-stretch=n
+
+Meaning
+
+y
+    Content fills the available page space.
+
+n
+    Keeps original aspect ratio.
+
+Default
+y
 
 
+
+==================================================
 -percentthreshold
-    Used only when pagesize=auto.
+==================================================
 
-    Defines tolerance when matching A-series paper.
+Used only when:
 
-    Example
-    -percentthreshold=5
+-pagesize=auto
 
-    Meaning
-    5% size difference allowed
+Defines tolerance when matching A-series paper sizes.
 
-    Default
-    5
+Default
+5
+
+Example
+
+-percentthreshold=10
+-percentthreshold=35
+
+Useful when
+
+• scans are cropped
+• scanners distort size
+• margins are removed
 
 
-Page Number Arguments
----------------------
 
+==================================================
 -numberoffset
-    Distance of page number from bottom-left corner (mm).
+==================================================
 
-    Example
-    -numberoffset=6
+Distance of page number from bottom-left corner.
 
-    Default
-    4
+Unit
+millimeters
 
+Default
+4
 
-Example Commands
-----------------
+Example
 
-Simple conversion
--command=file2pdf -input=images -output=out.pdf
-
-
-Book scanning workflow
--command=file2pdf -input=scans -output=book.pdf -pagesize=A4 -margin=12 -stretch=n
+-numberoffset=8
 
 
-Normalize mixed scans
--command=file2pdf -input=scans -output=normalized.pdf -fitwidth=210
+
+==================================================
+EXAMPLE COMMANDS
+==================================================
+
+Basic conversion
+
+-command=file2pdf -input=scans -output=out.pdf
+
+
+Force A4
+
+-command=file2pdf -input=scans -output=out.pdf -pagesize=A4
 
 
 Auto detect paper
--command=file2pdf -input=scans -output=print.pdf -pagesize=auto
+
+-command=file2pdf -input=scans -output=out.pdf -pagesize=auto
 
 
-Internal Processing Pipeline
-----------------------------
-Scan folder
-↓
-Sort filenames naturally
-↓
-Detect file type
-↓
-Image → layout engine
-PDF   → layout engine
-↓
-Fit into page
-↓
-Add page number
-↓
-Write final PDF
+Fixed page width
+
+-command=file2pdf -input=scans -output=out.pdf -pagewidth=210
 
 
-Defaults (if not specified)
----------------------------
+Book layout
+
+-command=file2pdf -input=scans -output=book.pdf -pagewidth=210 -margin=12 -stretch=n
+
+
+Heavily cropped scans
+
+-command=file2pdf -input=scans -output=clean.pdf -pagesize=auto -percentthreshold=35
+
+
+Print-ready A3
+
+-command=file2pdf -input=scans -output=print.pdf -pagesize=A3 -margin=10
+
+
+
+==================================================
+PROGRAM WORKFLOW
+==================================================
+
+1. Scan input folder
+2. Sort files naturally
+3. Detect file type
+4. Convert images
+5. Import PDF pages
+6. Fit content into page
+7. Apply margins
+8. Add page numbers
+9. Save final PDF
+
+
+
+==================================================
+DEFAULT VALUES
+==================================================
 
 margin             = 8 mm
 numberoffset       = 4 mm
-stretch            = true
+stretch            = y
 percentthreshold   = 5
 pagesize           = A4
+pagewidth          = disabled
 font               = Arial
 fontsize           = 5
 
 
-Typical Uses
-------------
-• scan-to-PDF workflows
-• comic / manga conversion
-• document normalization
-• print preparation
-• merging images and PDFs
+
+==================================================
+TYPICAL USE CASES
+==================================================
+
+Book scanning
+Comic conversion
+Document normalization
+Print preparation
+Merging images + PDFs
+Large scan batches
