@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ImageFolderToPdf")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+151535d72496a8bd1a39326eb5e0a36c70d32aa7")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ab4e0fb0c840a6307ebf2df5b0cb2f66947a6f72")]
 [assembly: System.Reflection.AssemblyProductAttribute("ImageFolderToPdf")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ImageFolderToPdf")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
