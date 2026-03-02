@@ -51,7 +51,7 @@ class Program
     static float marginMm = 8f;
     static float numberOffsetMm = 4f;
     static bool stretch = true;
-    static float percentThreshold = 5f;
+    static float autoSizeTolerance = 5f;
     static string pageSizeOption = "A4";
     static float? pageWidthMm = 210f;
     static string fontPath = @"C:\Windows\Fonts\arial.ttf";
@@ -60,7 +60,7 @@ class Program
     static bool usePageWidth => pageWidthMm.HasValue;
     static bool isOneToOne => pageSizeOption?.Equals("1_1", StringComparison.OrdinalIgnoreCase) == true;
     static bool isAuto => pageSizeOption?.Equals("auto", StringComparison.OrdinalIgnoreCase) == true;
-
+    static bool allowStretch => stretch && !isOneToOne;
 
     static int Main(string[] args)
     {
@@ -84,7 +84,7 @@ class Program
         marginMm = options.ContainsKey("margin") ? float.Parse(options["margin"]) : 8f;
         numberOffsetMm = options.ContainsKey("numberoffset") ? float.Parse(options["numberoffset"]) : 4f;
         stretch = options.ContainsKey("stretch") && options["stretch"].ToLower() == "y";
-        percentThreshold = options.ContainsKey("percentthreshold") ? float.Parse(options["percentthreshold"]) : 5f;
+        autoSizeTolerance = options.ContainsKey("autosizetolerance") ? float.Parse(options["autosizetolerance"]) : 5f;
         pageSizeOption = options.ContainsKey("pagesize") ? options["pagesize"] : "A4";
         pageWidthMm = options.ContainsKey("pagewidth") ? float.Parse(options["pagewidth"]) : null;
 
@@ -99,7 +99,7 @@ class Program
             fontSize,
             numberOffsetMm,
             stretch,
-            percentThreshold,
+            autoSizeTolerance,
             pageSizeOption,
             pageWidthMm,
             true
@@ -157,7 +157,7 @@ class Program
                     float paperW = MmToPoints(paper.Value.WidthMm);
                     float paperH = MmToPoints(paper.Value.HeightMm);
 
-                    if (IsPaperMatch(pageWidth, pageHeight, paperW, paperH, percentThreshold))
+                    if (IsPaperMatch(pageWidth, pageHeight, paperW, paperH, autoSizeTolerance))
                     {
                         pageWidth = Math.Min(paperW, paperH);
                         pageHeight = Math.Max(paperW, paperH);
@@ -201,10 +201,6 @@ class Program
             float availableWidth = pageWidth - (margin * 2);
             float availableHeight = pageHeight - (margin * 2);
 
-            bool allowStretch = stretch;
-            if (isOneToOne)
-                allowStretch = false;
-
             float drawWidth;
             float drawHeight;
 
@@ -231,20 +227,9 @@ class Program
                 new Rectangle(x, y, drawWidth, drawHeight)
             );
 
-            // Page number
-            if (addPageNumber)
-            {
-                canvas.BeginText();
-                canvas.SetFontAndSize(font, fontSize);
-                canvas.SetFillColor(ColorConstants.GRAY);
-                canvas.MoveText(numberOffset, numberOffset);
-                canvas.ShowText(pageNumber.ToString());
-                canvas.EndText();
-            }
+            if (addPageNumber) AddPageNumber(canvas, font, numberOffset, pageNumber);
         }
     }
-
-
 
     static void AddPageFromImage(string image, ref int pageNumber, PdfWriter writer, PdfDocument pdf, PdfFont font, bool addPageNumber = true)
     {
@@ -277,10 +262,6 @@ class Program
 
         float availableWidth = pageWidth - (margin * 2);
         float availableHeight = pageHeight - (margin * 2);
-
-        bool allowStretch = stretch;
-        if (isOneToOne)
-            allowStretch = false;
 
         float drawWidth;
         float drawHeight;
@@ -343,18 +324,18 @@ class Program
 
             canvas.RestoreState();
         }
-        if (addPageNumber)
-        {
-            canvas.BeginText();
-            canvas.SetFontAndSize(font, fontSize);
-            canvas.SetFillColor(ColorConstants.GRAY);
-            canvas.MoveText(numberOffset, numberOffset);
-            canvas.ShowText(pageNumber.ToString());
-            canvas.EndText();
-        }
+        if (addPageNumber) AddPageNumber(canvas, font, numberOffset, pageNumber);
     }
 
-
+    static void AddPageNumber(PdfCanvas canvas, PdfFont font, float numberOffset, int pageNumber)
+    {
+        canvas.BeginText();
+        canvas.SetFontAndSize(font, fontSize);
+        canvas.SetFillColor(ColorConstants.GRAY);
+        canvas.MoveText(numberOffset, numberOffset);
+        canvas.ShowText(pageNumber.ToString());
+        canvas.EndText();
+    }
 
     static void CreatePdfFromFiles(
          string folder,
