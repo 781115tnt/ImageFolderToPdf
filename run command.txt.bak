@@ -1,0 +1,237 @@
+dotnet run -- ^
+-command=img2pdf ^
+-input="D:\PythonScript\TEST\_IM\fs afda (5)" ^
+-output="D:\PythonScript\TEST\new.pdf" ^
+-margin=8 ^
+-numberOffset=4 ^
+-stretch=y
+-pageSize=auto
+
+dotnet run -- -command=img2pdf -input="D:\PythonScript\TEST\_IM\fs afda (5)" -output="D:\PythonScript\TEST\new.pdf" -margin=8 -numberOffset=4 -stretch=y -pageSize=auto -pageSize=auto
+
+
+dotnet run -- ^
+-command=img2pdf ^
+-input="D:\PythonScript\TEST\_IM\fs afda (5)" ^
+-output="D:\PythonScript\TEST\new.pdf" ^
+-margin=8 ^
+-numberOffset=4 ^
+-stretch=y ^
+-pageSize=auto ^
+-percentThreshold=1
+
+
+
+
+dotnet run -- ^
+-command=img2pdf ^
+-input="D:\PythonScript\TEST\_IM\fs afda (5)" ^
+-output="D:\PythonScript\TEST\new.pdf" ^
+-pageSize=A4 ^
+-margin=10 ^
+-stretch=n
+
+dotnet run -- ^
+-command=img2pdf ^
+-input="D:\PythonScript\TEST\_IM\fs afda (5)" ^
+-output="D:\PythonScript\TEST\new.pdf" ^
+-pageSize=1_1
+
+
+dotnet run -- ^
+-command=img2pdf ^
+-input="D:\PythonScript\TEST\_IM\fs afda (5)" ^
+-output="D:\PythonScript\TEST\new.pdf" ^
+-fitWidth=250 ^
+-margin=10
+
+
+
+################################################################################
+
+ALL SUPPORTED ARGUMENTS (FINAL VERSION)
+
+────────────────────────────────────
+REQUIRED ARGUMENTS
+────────────────────────────────────
+
+-command=img2pdf
+    Required. Must be exactly "img2pdf".
+
+-input="folderPath"
+    Required. Folder containing images.
+
+-output="file.pdf"
+    Required. Output PDF file path.
+
+
+────────────────────────────────────
+PAGE SIZE CONTROL
+────────────────────────────────────
+
+-pageSize=VALUE
+
+Supported values:
+
+A5
+A4
+A3
+A2
+A1
+A0
+2A0
+    Force all pages to that ISO size (portrait normalized).
+
+1_1
+    Exact image physical size.
+    - Margin forced to 0
+    - Stretch disabled
+    - True 1:1 output
+
+auto
+    Automatically snap to ISO size if within threshold.
+    Uses -percentThreshold.
+
+If omitted:
+    Default = image physical size.
+
+
+-percentThreshold=5
+
+Used ONLY with:
+    -pageSize=auto
+
+Meaning:
+    If image short/long sides are within X% of ISO paper,
+    snap to that paper size.
+
+Default:
+    5
+
+
+────────────────────────────────────
+FIT MODE
+────────────────────────────────────
+
+-fitWidth=250
+
+Highest priority mode.
+
+Meaning:
+    Page width = 250 mm
+    Page height = proportional to image
+    Margin works
+    Stretch works
+    pageSize ignored
+    percentThreshold ignored
+
+Unit:
+    Millimeters
+
+
+────────────────────────────────────
+MARGIN & PAGE NUMBER
+────────────────────────────────────
+
+-margin=8
+
+Page margin in millimeters.
+
+Default:
+    8
+
+Ignored in:
+    -pageSize=1_1
+
+
+-numberOffset=4
+
+Distance (mm) from bottom-left for page number.
+
+Default:
+    4
+
+
+────────────────────────────────────
+IMAGE SCALING
+────────────────────────────────────
+
+-stretch=y
+
+If set to y:
+    Image fills available rectangle.
+    Aspect ratio NOT preserved.
+
+If omitted:
+    Proportional scaling.
+    Aspect ratio preserved.
+
+Automatically disabled in:
+    -pageSize=1_1
+
+Works in:
+    pageSize=A4
+    pageSize=auto
+    fitWidth
+    default image mode
+
+
+────────────────────────────────────
+SUPPORTED ISO PAPER SIZES
+────────────────────────────────────
+
+A5
+A4
+A3
+A2
+A1
+A0
+2A0
+
+All portrait-normalized automatically.
+
+
+────────────────────────────────────
+PRIORITY ORDER (IMPORTANT)
+────────────────────────────────────
+
+1. -fitWidth
+2. -pageSize=1_1
+3. -pageSize=A4 (or other ISO)
+4. -pageSize=auto
+5. default → image size
+
+
+────────────────────────────────────
+EXAMPLE USAGE
+────────────────────────────────────
+
+Auto snap to paper:
+-pageSize=auto -percentThreshold=3
+
+Force A4 and stretch:
+-pageSize=A4 -stretch=y
+
+Exact physical size:
+-pageSize=1_1
+
+Fit to 250mm width with stretch:
+-fitWidth=250 -stretch=y
+
+
+────────────────────────────────────
+COMPLETE ARGUMENT LIST
+────────────────────────────────────
+
+-command=img2pdf
+-input=...
+-output=...
+-pageSize=...
+-percentThreshold=...
+-fitWidth=...
+-margin=...
+-numberOffset=...
+-stretch=y
+
+
+

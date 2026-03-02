@@ -1,0 +1,72 @@
+-command=img2pdf
+    Required.
+    Must be img2pdf to run the program.
+
+-input="D:\FolderPath"
+    Required.
+    Path to folder containing images.
+    Supported extensions:
+    .jpg .jpeg .png .bmp .gif .tif .tiff .webp
+
+-output="D:\output.pdf"
+    Required.
+    Full path of the generated PDF file.
+
+-margin=8
+    Optional.
+    Unit: millimeters.
+    Default: 8
+    Margin around image inside page.
+
+-numberOffset=4
+    Optional.
+    Unit: millimeters.
+    Default: 4
+    Distance from bottom-left corner for page number text.
+
+-stretch=y
+    Optional.
+    Default: off
+    y = image will stretch to fill available area
+    If omitted = image keeps aspect ratio
+
+-percentThreshold=5
+    Optional.
+    Unit: percent
+    Default: 5
+    Used only when -pageSize=auto
+    Determines maximum size difference allowed to snap to ISO paper size.
+
+-pageSize=A4
+    Optional.
+    Forces page size to ISO size.
+    Supported values:
+    A5
+    A4
+    A3
+    A2
+    A1
+    A0
+    2A0
+
+-pageSize=auto
+    Optional.
+    Automatically matches image to nearest ISO paper size
+    if difference is within -percentThreshold.
+
+-pageSize=1_1
+    Optional.
+    Page size = image size + 2 × margin
+    Image not scaled
+    Stretch ignored
+
+-fitWidth=250
+    Optional.
+    Unit: millimeters.
+    Forces page width to 250mm (portrait).
+    Page height calculated proportionally.
+    Auto page size ignored.
+    1_1 ignored.
+    Stretch works.
+
+
