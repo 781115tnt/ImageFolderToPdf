@@ -47,7 +47,10 @@ class Program
     };
 
     static Dictionary<string, List<int>> pageSizeReport =
-    new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+    new(StringComparer.OrdinalIgnoreCase);
+
+    static Dictionary<int, string> pageSizeByPage =
+        new Dictionary<int, string>();
 
     static string folder = "";
     static string outputPdf = "";
@@ -114,7 +117,6 @@ class Program
         return 0;
     }
 
-
     static void RegisterPageSize(float widthPts, float heightPts, int pageNumber)
     {
         float wMm = widthPts * 25.4f / 72f;
@@ -123,7 +125,7 @@ class Program
         float shortSide = Math.Min(wMm, hMm);
         float longSide = Math.Max(wMm, hMm);
 
-        const float toleranceMm = 2f; // allow small rounding differences
+        const float toleranceMm = 2f;
 
         string sizeLabel = null;
 
@@ -140,17 +142,19 @@ class Program
             }
         }
 
-        // If no ISO match, use raw size
         if (sizeLabel == null)
-        {
             sizeLabel = $"{Math.Round(shortSide)}x{Math.Round(longSide)} mm";
-        }
 
+        // Grouped storage
         if (!pageSizeReport.ContainsKey(sizeLabel))
             pageSizeReport[sizeLabel] = new List<int>();
 
         pageSizeReport[sizeLabel].Add(pageNumber);
+
+        // Page-by-page storage
+        pageSizeByPage[pageNumber] = sizeLabel;
     }
+
 
     static void WritePageSizeReport(string pdfPath)
     {
@@ -162,16 +166,25 @@ class Program
         writer.WriteLine("================");
         writer.WriteLine();
 
-        foreach (var kv in pageSizeReport
-            .OrderBy(k => k.Key))
+        // --- Grouped section ---
+        foreach (var kv in pageSizeReport.OrderBy(k => k.Key))
         {
             writer.WriteLine($"Page Size: {kv.Key}");
             writer.WriteLine($"Total Pages: {kv.Value.Count}");
             writer.WriteLine($"Pages: {string.Join(", ", kv.Value)}");
             writer.WriteLine();
         }
-    }
 
+        // --- Detailed page mapping section ---
+        writer.WriteLine("PAGE → SIZE");
+        writer.WriteLine("===========");
+        writer.WriteLine();
+
+        foreach (var kv in pageSizeByPage.OrderBy(k => k.Key))
+        {
+            writer.WriteLine($"{kv.Key} - {kv.Value}");
+        }
+    }
 
 
 
