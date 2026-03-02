@@ -13,15 +13,16 @@ using iText.Kernel.Geom;
 using iText.Kernel.Pdf.Canvas;
 
 using System.Runtime.InteropServices;
+using System.Net;
 
 class NaturalSortComparer : IComparer<string>
 {
     [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
     static extern int StrCmpLogicalW(string x, string y);
 
-    public int Compare(string x, string y)
+    public int Compare(string? x, string? y)
     {
-        return StrCmpLogicalW(x, y);
+        return StrCmpLogicalW(x ?? "", y ?? "");
     }
 }
 
@@ -35,27 +36,31 @@ class Program
 
     static readonly Dictionary<string, (float WidthMm, float HeightMm)> PaperSizes =
         new(StringComparer.OrdinalIgnoreCase)
-    {
-        { "A5", (148, 210) },
-        { "A4", (210, 297) },
-        { "A3", (297, 420) },
-        { "A2", (420, 594) },
-        { "A1", (594, 841) },
-        { "A0", (841, 1189) },
-        { "2A0",(1189,1682) }
-    };
+        {
+            { "A5", (148, 210) },
+            { "A4", (210, 297) },
+            { "A3", (297, 420) },
+            { "A2", (420, 594) },
+            { "A1", (594, 841) },
+            { "A0", (841, 1189) },
+            { "2A0",(1189,1682) }
+        };
+
     static string folder = "";
     static string outputPdf = "";
-
     static float marginMm = 8f;
     static float numberOffsetMm = 4f;
     static bool stretch = true;
     static float percentThreshold = 5f;
     static string pageSizeOption = "A4";
-    static float? pageWidth = 210f;
-
+    static float? pageWidthMm = 210f;
     static string fontPath = @"C:\Windows\Fonts\arial.ttf";
     static float fontSize = 5f;
+
+    static bool usePageWidth => pageWidthMm.HasValue;
+    static bool isOneToOne => pageSizeOption?.Equals("1_1", StringComparison.OrdinalIgnoreCase) == true;
+    static bool isAuto => pageSizeOption?.Equals("auto", StringComparison.OrdinalIgnoreCase) == true;
+
 
     static int Main(string[] args)
     {
@@ -80,8 +85,8 @@ class Program
         numberOffsetMm = options.ContainsKey("numberoffset") ? float.Parse(options["numberoffset"]) : 4f;
         stretch = options.ContainsKey("stretch") && options["stretch"].ToLower() == "y";
         percentThreshold = options.ContainsKey("percentthreshold") ? float.Parse(options["percentthreshold"]) : 5f;
-        pageSizeOption = options.ContainsKey("pagesize") ? options["pagesize"] : null;
-        pageWidth = options.ContainsKey("pagewidth") ? float.Parse(options["pagewidth"]) : null;
+        pageSizeOption = options.ContainsKey("pagesize") ? options["pagesize"] : "A4";
+        pageWidthMm = options.ContainsKey("pagewidth") ? float.Parse(options["pagewidth"]) : null;
 
         fontPath = @"C:\Windows\Fonts\arial.ttf";
         fontSize = 5f;
@@ -96,7 +101,7 @@ class Program
             stretch,
             percentThreshold,
             pageSizeOption,
-            pageWidth,
+            pageWidthMm,
             true
         );
 
@@ -106,8 +111,63 @@ class Program
         return 0;
     }
 
+    static void CalculatePageSize(ref float imageWidthPts, ref float imageHeightPts, out float pageWidth, out float pageHeight)
+    {
+        float margin = MmToPoints(marginMm);
+        float numberOffset = MmToPoints(numberOffsetMm);
 
+        if (usePageWidth)
+        {
+            float targetWidthPts = MmToPoints(pageWidthMm ?? 210f);
 
+            float imgShort = Math.Min(imageWidthPts, imageHeightPts);
+            float imgLong = Math.Max(imageWidthPts, imageHeightPts);
+            float ratio = imgLong / imgShort;
+
+            pageWidth = targetWidthPts;
+            pageHeight = targetWidthPts * ratio;
+        }
+        else if (isOneToOne)
+        {
+            float imgShort = Math.Min(imageWidthPts, imageHeightPts);
+            float imgLong = Math.Max(imageWidthPts, imageHeightPts);
+
+            pageWidth = imgShort + (margin * 2);
+            pageHeight = imgLong + (margin * 2);
+        }
+        else if (!string.IsNullOrEmpty(pageSizeOption) && !isAuto)
+        {
+            if (!PaperSizes.ContainsKey(pageSizeOption))
+                throw new Exception($"Unsupported page size: {pageSizeOption}");
+
+            var paper = PaperSizes[pageSizeOption];
+
+            pageWidth = MmToPoints(Math.Min(paper.WidthMm, paper.HeightMm));
+            pageHeight = MmToPoints(Math.Max(paper.WidthMm, paper.HeightMm));
+        }
+        else
+        {
+            pageWidth = Math.Min(imageWidthPts, imageHeightPts);
+            pageHeight = Math.Max(imageWidthPts, imageHeightPts);
+
+            if (isAuto)
+            {
+                foreach (var paper in PaperSizes)
+                {
+                    float paperW = MmToPoints(paper.Value.WidthMm);
+                    float paperH = MmToPoints(paper.Value.HeightMm);
+
+                    if (IsPaperMatch(pageWidth, pageHeight, paperW, paperH, percentThreshold))
+                    {
+                        pageWidth = Math.Min(paperW, paperH);
+                        pageHeight = Math.Max(paperW, paperH);
+                        break;
+                    }
+                }
+            }
+        }
+
+    }
 
     static void AddPagesFromPdf(string file, ref int pageNumber, PdfWriter writer, PdfDocument pdf, PdfFont font, bool addPageNumber = true)
     {
@@ -128,65 +188,10 @@ class Program
             float margin = MmToPoints(marginMm);
             float numberOffset = MmToPoints(numberOffsetMm);
 
-            bool isOneToOne = pageSizeOption?.Equals("1_1", StringComparison.OrdinalIgnoreCase) == true;
-            bool isAuto = pageSizeOption?.Equals("auto", StringComparison.OrdinalIgnoreCase) == true;
-            bool usePageWidth = Program.pageWidth.HasValue;
-
             float pageWidth;
             float pageHeight;
 
-            // -------- PAGE SIZE LOGIC (same as images) --------
-
-            if (usePageWidth)
-            {
-                float targetWidthPts = MmToPoints(Program.pageWidth.Value);
-
-                float imgShort = Math.Min(imageWidthPts, imageHeightPts);
-                float imgLong = Math.Max(imageWidthPts, imageHeightPts);
-                float ratio = imgLong / imgShort;
-
-                pageWidth = targetWidthPts;
-                pageHeight = targetWidthPts * ratio;
-            }
-            else if (isOneToOne)
-            {
-                float imgShort = Math.Min(imageWidthPts, imageHeightPts);
-                float imgLong = Math.Max(imageWidthPts, imageHeightPts);
-
-                pageWidth = imgShort + (margin * 2);
-                pageHeight = imgLong + (margin * 2);
-            }
-            else if (!string.IsNullOrEmpty(pageSizeOption) && !isAuto)
-            {
-                if (!PaperSizes.ContainsKey(pageSizeOption))
-                    throw new Exception($"Unsupported page size: {pageSizeOption}");
-
-                var paper = PaperSizes[pageSizeOption];
-
-                pageWidth = MmToPoints(Math.Min(paper.WidthMm, paper.HeightMm));
-                pageHeight = MmToPoints(Math.Max(paper.WidthMm, paper.HeightMm));
-            }
-            else
-            {
-                pageWidth = Math.Min(imageWidthPts, imageHeightPts);
-                pageHeight = Math.Max(imageWidthPts, imageHeightPts);
-
-                if (isAuto)
-                {
-                    foreach (var paper in PaperSizes)
-                    {
-                        float paperW = MmToPoints(paper.Value.WidthMm);
-                        float paperH = MmToPoints(paper.Value.HeightMm);
-
-                        if (IsPaperMatch(pageWidth, pageHeight, paperW, paperH, percentThreshold))
-                        {
-                            pageWidth = Math.Min(paperW, paperH);
-                            pageHeight = Math.Max(paperW, paperH);
-                            break;
-                        }
-                    }
-                }
-            }
+            CalculatePageSize(ref imageWidthPts, ref imageHeightPts, out pageWidth, out pageHeight);
 
             var newPage = pdf.AddNewPage(new PageSize(pageWidth, pageHeight));
             pageNumber++;
@@ -255,66 +260,13 @@ class Program
         float imageWidthPts = pixelWidth * 72f / dpiX;
         float imageHeightPts = pixelHeight * 72f / dpiY;
 
-        float pageWidth;
-        float pageHeight;
-
         float margin = MmToPoints(marginMm);
         float numberOffset = MmToPoints(numberOffsetMm);
 
-        bool isOneToOne = pageSizeOption?.Equals("1_1", StringComparison.OrdinalIgnoreCase) == true;
-        bool isAuto = pageSizeOption?.Equals("auto", StringComparison.OrdinalIgnoreCase) == true;
-        bool usePageWidth = Program.pageWidth.HasValue;
+        float pageWidth;
+        float pageHeight;
+        CalculatePageSize(ref imageWidthPts, ref imageHeightPts, out pageWidth, out pageHeight);
 
-        // -------- PAGE SIZE LOGIC --------
-
-        if (usePageWidth)
-        {
-            float targetWidthPts = MmToPoints(Program.pageWidth.Value);
-            float imgShort = Math.Min(imageWidthPts, imageHeightPts);
-            float imgLong = Math.Max(imageWidthPts, imageHeightPts);
-            float ratio = imgLong / imgShort;
-
-            pageWidth = targetWidthPts;
-            pageHeight = targetWidthPts * ratio;
-        }
-        else if (isOneToOne)
-        {
-            float imgShort = Math.Min(imageWidthPts, imageHeightPts);
-            float imgLong = Math.Max(imageWidthPts, imageHeightPts);
-
-            pageWidth = imgShort + (margin * 2);
-            pageHeight = imgLong + (margin * 2);
-        }
-        else if (!string.IsNullOrEmpty(pageSizeOption) && !isAuto)
-        {
-            if (!PaperSizes.ContainsKey(pageSizeOption))
-                throw new Exception($"Unsupported page size: {pageSizeOption}");
-
-            var paper = PaperSizes[pageSizeOption];
-            pageWidth = MmToPoints(Math.Min(paper.WidthMm, paper.HeightMm));
-            pageHeight = MmToPoints(Math.Max(paper.WidthMm, paper.HeightMm));
-        }
-        else
-        {
-            pageWidth = Math.Min(imageWidthPts, imageHeightPts);
-            pageHeight = Math.Max(imageWidthPts, imageHeightPts);
-
-            if (isAuto)
-            {
-                foreach (var paper in PaperSizes)
-                {
-                    float paperW = MmToPoints(paper.Value.WidthMm);
-                    float paperH = MmToPoints(paper.Value.HeightMm);
-
-                    if (IsPaperMatch(pageWidth, pageHeight, paperW, paperH, percentThreshold))
-                    {
-                        pageWidth = Math.Min(paperW, paperH);
-                        pageHeight = Math.Max(paperW, paperH);
-                        break;
-                    }
-                }
-            }
-        }
 
         var page = pdf.AddNewPage(new PageSize(pageWidth, pageHeight));
         pageNumber++;
@@ -415,7 +367,7 @@ class Program
          float percentThreshold,
          string pageSizeOption,
          float? pageWidth,
-         bool addPageNumber=true)
+         bool addPageNumber = true)
     {
         var supportedFiles = Directory
             .EnumerateFiles(folder)
