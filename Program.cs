@@ -102,8 +102,8 @@ class Program
         Console.WriteLine("Done.");
         return 0;
     }
-    
-    
+
+
     static void AddPagesFromPdf(string file, ref int pageNumber, PdfWriter writer, PdfDocument pdf, PdfFont font)
     {
         using var src = new PdfDocument(new PdfReader(file));
@@ -111,13 +111,23 @@ class Program
         for (int i = 1; i <= src.GetNumberOfPages(); i++)
         {
             var srcPage = src.GetPage(i);
-            var srcSize = srcPage.GetPageSize();
 
-            float imageWidthPts = srcSize.GetWidth();
-            float imageHeightPts = srcSize.GetHeight();
+            // Detect the real visible page area
+            Rectangle box =
+                srcPage.GetCropBox()
+                ?? srcPage.GetTrimBox()
+                ?? srcPage.GetArtBox()
+                ?? srcPage.GetMediaBox();
 
-            float pageWidth;
-            float pageHeight;
+            float imageWidthPts = box.GetWidth();
+            float imageHeightPts = box.GetHeight();
+
+            // Handle rotated PDFs
+            int rotation = srcPage.GetRotation();
+            if (rotation == 90 || rotation == 270)
+            {
+                (imageWidthPts, imageHeightPts) = (imageHeightPts, imageWidthPts);
+            }
 
             float margin = MmToPoints(marginMm);
             float numberOffset = MmToPoints(numberOffsetMm);
@@ -126,11 +136,15 @@ class Program
             bool isAuto = pageSizeOption?.Equals("auto", StringComparison.OrdinalIgnoreCase) == true;
             bool useFitWidth = fitWidth.HasValue;
 
-            // -------- PAGE SIZE LOGIC (same as image) --------
+            float pageWidth;
+            float pageHeight;
+
+            // ---------- PAGE SIZE LOGIC ----------
 
             if (useFitWidth)
             {
                 float targetWidthPts = MmToPoints(fitWidth.Value);
+
                 float imgShort = Math.Min(imageWidthPts, imageHeightPts);
                 float imgLong = Math.Max(imageWidthPts, imageHeightPts);
                 float ratio = imgLong / imgShort;
@@ -143,8 +157,8 @@ class Program
                 float imgShort = Math.Min(imageWidthPts, imageHeightPts);
                 float imgLong = Math.Max(imageWidthPts, imageHeightPts);
 
-                pageWidth = imgShort + (margin * 2);
-                pageHeight = imgLong + (margin * 2);
+                pageWidth = imgShort + margin * 2;
+                pageHeight = imgLong + margin * 2;
             }
             else if (!string.IsNullOrEmpty(pageSizeOption) && !isAuto)
             {
@@ -152,6 +166,7 @@ class Program
                     throw new Exception($"Unsupported page size: {pageSizeOption}");
 
                 var paper = PaperSizes[pageSizeOption];
+
                 pageWidth = MmToPoints(Math.Min(paper.WidthMm, paper.HeightMm));
                 pageHeight = MmToPoints(Math.Max(paper.WidthMm, paper.HeightMm));
             }
@@ -182,8 +197,8 @@ class Program
 
             var canvas = new PdfCanvas(newPage);
 
-            float availableWidth = pageWidth - (margin * 2);
-            float availableHeight = pageHeight - (margin * 2);
+            float availableWidth = pageWidth - margin * 2;
+            float availableHeight = pageHeight - margin * 2;
 
             bool allowStretch = stretch;
             if (isOneToOne)
@@ -191,8 +206,6 @@ class Program
 
             float drawWidth;
             float drawHeight;
-
-            bool isLandscape = imageWidthPts > imageHeightPts;
 
             if (!allowStretch)
             {
@@ -219,7 +232,7 @@ class Program
                 new Rectangle(x, y, drawWidth, drawHeight)
             );
 
-            // page number
+            // Page number
             canvas.BeginText();
             canvas.SetFontAndSize(font, fontSize);
             canvas.SetFillColor(ColorConstants.GRAY);
@@ -228,8 +241,7 @@ class Program
             canvas.EndText();
         }
     }
-    
-    
+
     static void AddPageFromImage(string image, ref int pageNumber, PdfWriter writer, PdfDocument pdf, PdfFont font)
     {
 
@@ -388,18 +400,20 @@ class Program
         canvas.ShowText(pageNumber.ToString());
         canvas.EndText();
     }
-   
-   static void CreatePdfFromFiles(
-        string folder,
-        string outputPdf,
-        float marginMm,
-        string fontPath,
-        float fontSize,
-        float numberOffsetMm,
-        bool stretch,
-        float percentThreshold,
-        string pageSizeOption,
-        float? fitWidth)
+
+
+
+    static void CreatePdfFromFiles(
+         string folder,
+         string outputPdf,
+         float marginMm,
+         string fontPath,
+         float fontSize,
+         float numberOffsetMm,
+         bool stretch,
+         float percentThreshold,
+         string pageSizeOption,
+         float? fitWidth)
     {
         var supportedFiles = Directory
             .EnumerateFiles(folder)
@@ -432,17 +446,19 @@ class Program
         float paperH,
         float percentThreshold)
     {
-        float imageShort = Math.Min(imageW, imageH);
-        float imageLong = Math.Max(imageW, imageH);
+        float imgShort = Math.Min(imageW, imageH);
+        float imgLong = Math.Max(imageW, imageH);
 
-        float paperShort = Math.Min(paperW, paperH);
-        float paperLong = Math.Max(paperW, paperH);
+        float papShort = Math.Min(paperW, paperH);
+        float papLong = Math.Max(paperW, paperH);
 
-        float diffShort = Math.Abs(imageShort - paperShort) / paperShort * 100f;
-        float diffLong = Math.Abs(imageLong - paperLong) / paperLong * 100f;
+        // Allow cropped pages
+        float shortDiff = (papShort - imgShort) / papShort * 100f;
+        float longDiff = (papLong - imgLong) / papLong * 100f;
 
-        return diffShort <= percentThreshold &&
-               diffLong <= percentThreshold;
+        return shortDiff >= 0 && longDiff >= 0 &&
+               shortDiff <= percentThreshold &&
+               longDiff <= percentThreshold;
     }
 
     static float MmToPoints(float mm)
