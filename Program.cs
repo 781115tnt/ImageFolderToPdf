@@ -104,6 +104,8 @@ class Program
     }
 
 
+
+
     static void AddPagesFromPdf(string file, ref int pageNumber, PdfWriter writer, PdfDocument pdf, PdfFont font)
     {
         using var src = new PdfDocument(new PdfReader(file));
@@ -112,22 +114,13 @@ class Program
         {
             var srcPage = src.GetPage(i);
 
-            // Detect the real visible page area
-            Rectangle box =
-                srcPage.GetCropBox()
-                ?? srcPage.GetTrimBox()
-                ?? srcPage.GetArtBox()
-                ?? srcPage.GetMediaBox();
+            // Copy page first so we know the real drawable size
+            var pageCopy = srcPage.CopyAsFormXObject(pdf);
 
-            float imageWidthPts = box.GetWidth();
-            float imageHeightPts = box.GetHeight();
+            Rectangle bbox = pageCopy.GetBBox().ToRectangle();
 
-            // Handle rotated PDFs
-            int rotation = srcPage.GetRotation();
-            if (rotation == 90 || rotation == 270)
-            {
-                (imageWidthPts, imageHeightPts) = (imageHeightPts, imageWidthPts);
-            }
+            float imageWidthPts = bbox.GetWidth();
+            float imageHeightPts = bbox.GetHeight();
 
             float margin = MmToPoints(marginMm);
             float numberOffset = MmToPoints(numberOffsetMm);
@@ -139,7 +132,7 @@ class Program
             float pageWidth;
             float pageHeight;
 
-            // ---------- PAGE SIZE LOGIC ----------
+            // -------- PAGE SIZE LOGIC (same as images) --------
 
             if (useFitWidth)
             {
@@ -157,8 +150,8 @@ class Program
                 float imgShort = Math.Min(imageWidthPts, imageHeightPts);
                 float imgLong = Math.Max(imageWidthPts, imageHeightPts);
 
-                pageWidth = imgShort + margin * 2;
-                pageHeight = imgLong + margin * 2;
+                pageWidth = imgShort + (margin * 2);
+                pageHeight = imgLong + (margin * 2);
             }
             else if (!string.IsNullOrEmpty(pageSizeOption) && !isAuto)
             {
@@ -197,8 +190,8 @@ class Program
 
             var canvas = new PdfCanvas(newPage);
 
-            float availableWidth = pageWidth - margin * 2;
-            float availableHeight = pageHeight - margin * 2;
+            float availableWidth = pageWidth - (margin * 2);
+            float availableHeight = pageHeight - (margin * 2);
 
             bool allowStretch = stretch;
             if (isOneToOne)
@@ -225,8 +218,6 @@ class Program
             float x = (pageWidth - drawWidth) / 2;
             float y = (pageHeight - drawHeight) / 2;
 
-            var pageCopy = srcPage.CopyAsFormXObject(pdf);
-
             canvas.AddXObjectFittedIntoRectangle(
                 pageCopy,
                 new Rectangle(x, y, drawWidth, drawHeight)
@@ -241,6 +232,8 @@ class Program
             canvas.EndText();
         }
     }
+
+
 
     static void AddPageFromImage(string image, ref int pageNumber, PdfWriter writer, PdfDocument pdf, PdfFont font)
     {
