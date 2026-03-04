@@ -1,0 +1,22 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": ".NET 10 Debug",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/bin/Debug/net10.0/ImageFolderToPdf.dll",
+      "args": [
+        "-command=file2pdf",
+        "-input=D:\\PythonScript\\TEST\\_IM\\fs afda (5)",
+        "-output=D:\\PythonScript\\TEST\\new-1.pdf",
+        "-pageSize=auto",
+        "-margin=0",
+        "-autosizeTolerance=0"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "stopAtEntry": false
+    }
+  ]
+}
