@@ -34,21 +34,25 @@ class Program
         ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff", ".webp", PDF_EXTENSION
     };
 
+    const float A2WMM = 420f;
+    const float A2HMM = 594f;
     static readonly Dictionary<string, (float WidthMm, float HeightMm)> _PaperSizeDict =
     new(StringComparer.OrdinalIgnoreCase)
     {
-        { "A5", (148, 210) },
-        { "A4", (210, 297) },
-        { "A3", (297, 420) },
-        { "A2", (420, 594) },
-        { "A1", (594, 841) },
-        { "A0", (841, 1189) },
-        { "2A0",(1189,1682) }
+        { "A5", (148,   210) },
+        { "A4", (210,   297) },
+        { "A3", (297,   420) },
+        { "A2", (A2WMM, A2HMM) },
+        { "A1", (594,   841) },
+        { "A0", (841,   1189) },
+        { "2A0",(1189,  1682) }
     };
+
+    public readonly static float A2WPTS = MmToPts(A2WMM);
+    public readonly static float A2HPTS = MmToPts(A2HMM);
 
     const float STANDARD_SIZE_TOLERANCE_MM = 2f;
     const string FONT_PATH = @"C:\Windows\Fonts\arial.ttf";
-
 
     public class PageInfoConllection
     {
@@ -216,6 +220,7 @@ class Program
         public Configuration config;
         public List<List<PageInfo>>? PageInfosGroupBySize { get; set; }
         public PageInfoConllection? PageInfos { get; set; }
+        public List<int> A2Pages = new List<int>();
         public PageAnalyzer(Configuration config)
         {
             this.config = config;
@@ -249,6 +254,8 @@ class Program
                     TMatrix transformMatrix;
                     CalculatePageSize(origXPts, origYPts, out pageWidthPts, out pageHeightPts, out transformMatrix, true, 0f, 0f);
                     pageNumber++;
+
+                    if (MatchStandardPageSize(pageWidthPts, pageHeightPts, A2WPTS, A2HPTS, config.AutoSizeToleranceMm)) A2Pages.Add(pageNumber);
                     //If OrigPageNumber = 0 => image, otherwise pdf.  This case = 0
                     new PageInfo(origXPts, origYPts, pageWidthPts, pageHeightPts, pageNumber, fileIndex, 0, 0f, 0f, transformMatrix, PageInfos);
                 }
@@ -273,6 +280,8 @@ class Program
                         TMatrix transformMatrix;
                         CalculatePageSize(origXPts, origYPts, out pageWidthPts, out pageHeightPts, out transformMatrix, false, llx, lly);
                         pageNumber++;
+
+                        if (MatchStandardPageSize(pageWidthPts, pageHeightPts, A2WPTS, A2HPTS, config.AutoSizeToleranceMm)) A2Pages.Add(pageNumber);
                         //If OrigPageNumber = 0 => image, otherwise pdf.  This case = original pdf page number
                         new PageInfo(origXPts, origYPts, pageWidthPts, pageHeightPts, pageNumber, fileIndex, i, llx, lly, transformMatrix, PageInfos);
                     }
@@ -422,7 +431,6 @@ class Program
             //Until here all x, y, w, h are calculated.  imgXPts > imgYPts => landscape
             if (!isImage) TransformMatrix = CreatePdfTransformMatrix(origXPts, origYPts, x, y, w, h, llx, lly);
             else TransformMatrix = CreateImageTransformMatrix(x, y, w, h, origXPts > origYPts);
-
         }
 
         TMatrix CreatePdfTransformMatrix(float origXPts, float origYPts, float x, float y, float w, float h, float llx, float lly)
@@ -662,9 +670,14 @@ class Program
             FONT_PATH,
             5f);
 
+
         PageAnalyzer pa = new PageAnalyzer(config);
 
         pa.AnalyzePages();
+
+        foreach(var i in pa.A2Pages) Console.WriteLine(i);
+
+
 
         PdfCreator pdfCreator = new PdfCreator(pa);
         pdfCreator.CreateGroupBySizePdfFromFiles(true);
@@ -704,10 +717,10 @@ class Program
         }
         return sizeLabel;
     }
-    static bool MatchStandardPageSize(float imageWPts, float imageHPts, float paperWPts, float paperHPts, float percentThreshold)
+    static bool MatchStandardPageSize(float origWPts, float origHPts, float paperWPts, float paperHPts, float percentThreshold)
     {
-        float imgShort = Math.Min(imageWPts, imageHPts);
-        float imgLong = Math.Max(imageWPts, imageHPts);
+        float imgShort = Math.Min(origWPts, origHPts);
+        float imgLong = Math.Max(origWPts, origHPts);
 
         float papShort = Math.Min(paperWPts, paperHPts);
         float papLong = Math.Max(paperWPts, paperHPts);
@@ -718,7 +731,6 @@ class Program
         return shortDiff <= percentThreshold &&
                longDiff <= percentThreshold;
     }
-
     static float MmToPts(float mm)
         => mm * 72f / 25.4f;
     static float PtsToMm(float points)
