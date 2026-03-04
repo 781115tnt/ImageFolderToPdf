@@ -1,0 +1,722 @@
+﻿using System;
+using System.IO;
+using System.Linq;
+using System.Collections.Generic;
+using IOPath = System.IO.Path;
+using System.IO;
+
+using iText.Kernel.Pdf;
+using iText.Kernel.Colors;
+using iText.Kernel.Font;
+using iText.IO.Font;
+using iText.IO.Image;
+using iText.Kernel.Geom;
+using iText.Kernel.Pdf.Canvas;
+
+using System.Runtime.InteropServices;
+using System.Net;
+using iText.IO.Source;
+using System.ComponentModel;
+using System.Reflection.Metadata;
+using static Program;
+using iText.Kernel.Pdf.Xobject;
+using iText.Commons.Utils;
+using Org.BouncyCastle.Math.EC.Rfc7748;
+using System.Runtime.CompilerServices;
+using System.Xml;
+using Org.BouncyCastle.Bcpg.OpenPgp;
+using System.Text;
+
+class NaturalSortComparer : IComparer<string>
+{
+    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
+    static extern int StrCmpLogicalW(string x, string y);
+
+    public int Compare(string? x, string? y)
+    {
+        return StrCmpLogicalW(x ?? "", y ?? "");
+    }
+}
+
+class Program
+{
+    const string PDF_EXTENSION = ".pdf";
+    static readonly string[] _ImageExtensions =
+    {
+        ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff", ".webp", PDF_EXTENSION
+    };
+
+    static readonly Dictionary<string, (float WidthMm, float HeightMm)> _PaperSizeDict =
+    new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "A5", (148, 210) },
+        { "A4", (210, 297) },
+        { "A3", (297, 420) },
+        { "A2", (420, 594) },
+        { "A1", (594, 841) },
+        { "A0", (841, 1189) },
+        { "2A0",(1189,1682) }
+    };
+
+    static Dictionary<string, List<int>> _PageSizeReport =
+    new(StringComparer.OrdinalIgnoreCase);
+
+    static Dictionary<int, string> _PageSizeByPage =
+        new Dictionary<int, string>();
+
+    static string _folder = "";
+    static string _outputPdf = "";
+    static float _marginMm = 8f;
+    static float _numberOffsetMm = 4f;
+    static bool _stretch = true;
+    static float _autoSizeToleranceMm = 5f;
+    static string? _standardPageSize = null;
+    static float? _fitPageWidthMm = 210f;
+    static bool _usePageWidth => _fitPageWidthMm.HasValue;
+    static bool _isOneToOne => _standardPageSize?.Equals("1_1", StringComparison.OrdinalIgnoreCase) == true;
+    static bool _isAuto => _standardPageSize?.Equals("auto", StringComparison.OrdinalIgnoreCase) == true;
+    static bool _allowStretch => _stretch && !_isOneToOne;
+    static float _marginPts => MmToPts(_marginMm);
+    static float _numberOffsetPts => MmToPts(_numberOffsetMm);
+
+    static float _fitPageWidthPts => MmToPts(_fitPageWidthMm ?? 210);
+
+
+    static List<string> _supportedFiles = new List<string>();
+
+    public static List<List<OrigPageInfo>>? _origFileGroupsBySize;
+
+    public static OrigPageInfoGroup? _origPageGroup;
+
+    static string _fontPath = @"C:\Windows\Fonts\arial.ttf";
+    static float _fontSize = 5f;
+
+    const float STANDARD_SIZE_TOLERANCE_MM = 2f;
+    
+    static int Main(string[] args)
+    {
+        var options = ParseArguments(args);
+
+        if (!options.ContainsKey("command") || options["command"] != "file2pdf")
+        {
+            Console.WriteLine("Usage: -command=file2pdf -input=folder -output=file.pdf");
+            return 1;
+        }
+
+        if (!options.ContainsKey("input") || !options.ContainsKey("output"))
+        {
+            Console.WriteLine("Missing -input or -output");
+            return 1;
+        }
+
+        _folder = options["input"];
+        _outputPdf = options["output"];
+
+        _marginMm = options.ContainsKey("margin") ? float.Parse(options["margin"]) : 8f;
+        _numberOffsetMm = options.ContainsKey("numberoffset") ? float.Parse(options["numberoffset"]) : 4f;
+        _stretch = options.ContainsKey("stretch") && options["stretch"].ToLower() == "y";
+        _autoSizeToleranceMm = options.ContainsKey("autosizetolerance") ? float.Parse(options["autosizetolerance"]) : 5f;
+        // If not specify any thing -> fallback to A4
+        _standardPageSize = options.ContainsKey("pagesize") ? options["pagesize"] : null;
+        _fitPageWidthMm = options.ContainsKey("pagewidth") ? float.Parse(options["pagewidth"]) : null;
+
+        _fontPath = @"C:\Windows\Fonts\arial.ttf";
+        _fontSize = 5f;
+
+        // NonRecursive
+        // _supportedFiles = Directory.EnumerateFiles(_folder)
+        //     .Where(f => _ImageExtensions.Contains(IOPath.GetExtension(f).ToLower()))
+        //     .OrderBy(f => IOPath.GetFileName(f), new NaturalSortComparer())
+        //     .ToList();
+        // Recursive
+        _supportedFiles = Directory.EnumerateFiles(_folder, "*.*", SearchOption.AllDirectories)
+            .Where(f => _ImageExtensions.Contains(IOPath.GetExtension(f).ToLower()))
+            .OrderBy(f => IOPath.GetFileName(f), new NaturalSortComparer())
+            .ToList();
+
+
+
+        _origPageGroup = AnalyzePages();
+        _origFileGroupsBySize = _origPageGroup.GenerateGroupsBySize();
+
+
+        CreateGroupBySizePdfFromFiles(_origPageGroup, true);
+        CreateOnePdfFromFiles(_origPageGroup, true);
+
+        //_origPageGroup.WriteDebugGroup();
+        //_origPageGroup.WriteDebugNonGroup(false);
+        _origPageGroup.WriteReport(false);
+
+        Console.WriteLine("Done.");
+        return 0;
+    }
+
+
+
+
+    public class OrigPageInfoGroup
+    {
+        const int SIZE_GROUP_TOLERANCE_PTS = 5;
+        public OrigPageInfoGroup() { OrigPageInfoList = new List<OrigPageInfo>(); }
+        public List<OrigPageInfo> OrigPageInfoList { get; set; }
+        public List<List<OrigPageInfo>> GenerateGroupsBySize()
+        {
+            var groups = new List<List<OrigPageInfo>>();
+            foreach (var item in OrigPageInfoList)
+            {
+                bool added = false;
+                foreach (var group in groups)
+                {
+                    var representative = group[0];
+
+                    if (Math.Abs(item.WidthPts - representative.WidthPts) <= SIZE_GROUP_TOLERANCE_PTS &&
+                        Math.Abs(item.HeightPts - representative.HeightPts) <= SIZE_GROUP_TOLERANCE_PTS)
+                    {
+                        group.Add(item);
+                        added = true;
+                        break;
+                    }
+                }
+                if (!added) groups.Add(new List<OrigPageInfo> { item });
+            }
+            return groups;
+        }
+        public void WriteDebugGroup()
+        {
+            StringBuilder text = new StringBuilder();
+            GroupsToText(text);
+            Console.WriteLine(text);
+        }
+        public void WriteDebugNonGroup(bool detailFilePath)
+        {
+            StringBuilder text = new StringBuilder();
+            NonGroupToText(text, detailFilePath);
+            Console.WriteLine(text);
+        }
+
+        private void GroupsToText(StringBuilder text)
+        {
+            if (text == null) return;
+            text.Append($"TOTAL {OrigPageInfoList.Count} PAGE(S):{Environment.NewLine}");
+            foreach (var group in _origFileGroupsBySize ?? Enumerable.Empty<List<OrigPageInfo>>())
+            {
+                text.Append($"\t{GetSizeLabel(group[0].WidthPts, group[0].HeightPts)} - Total: {group.Count} page(s){Environment.NewLine}\t\t");
+                foreach (var item in group) { text.Append(item.PageNumber).Append(" "); }
+                text.Append(Environment.NewLine);
+            }
+        }
+        private void NonGroupToText(StringBuilder text, bool withFilePath)
+        {
+            if(text == null) return;
+            text.Append($"PAGE INFO:{Environment.NewLine}");
+            int index = 0;
+            foreach (var origPageInfo in OrigPageInfoList)
+            {
+                text.Append($"\t{origPageInfo.PageNumber} - {GetSizeLabel(origPageInfo.WidthPts, origPageInfo.HeightPts)}");
+                if (withFilePath) text.Append($"\t{_supportedFiles[origPageInfo.FileIndex]}{Environment.NewLine}");
+                else text.Append(Environment.NewLine);
+                index++;
+            }
+        }
+
+        public void WriteReport(bool detailFilePath)
+        {
+            StringBuilder text = new StringBuilder();
+            GroupsToText(text);
+            NonGroupToText(text, detailFilePath);
+            File.WriteAllText(IOPath.ChangeExtension(_outputPdf, ".txt"), text.ToString());
+        }
+    }
+    public class OrigPageInfo
+    {
+        public float WidthPts { get; set; }
+        public float HeightPts { get; set; }
+        public int PageNumber { get; set; }
+        public int FileIndex { get; set; }
+        //If OrigPageNumber = 0 => image, otherwise pdf
+        public bool IsImage => OrigPageNumber == 0;
+        public int OrigPageNumber { get; set; }
+        public float OrigWidthPts { get; set; }
+        private float OrigWidthMm => PtsToMm(OrigWidthPts);
+        public float OrigHeightPts { get; set; }
+        private float OrigHeightMm => PtsToMm(OrigHeightPts);
+        public TMatrix TransformMatrix { get; set; }
+        public float llx { get; set; }
+        public float lly { get; set; }
+        public OrigPageInfo(float OrigWidthPts, float OrigHeightPts, float WidthPts, float HeightPts, int PageNumber, int FileIndex, int OrigPageNumber, float llx, float lly, TMatrix TransformMatrix, OrigPageInfoGroup group)
+        {
+            this.OrigWidthPts = OrigWidthPts;
+            this.OrigHeightPts = OrigHeightPts;
+            this.WidthPts = WidthPts;
+            this.HeightPts = HeightPts;
+            this.PageNumber = PageNumber;
+            this.FileIndex = FileIndex;
+            //If OrigPageNumber = 0 => image, otherwise pdf
+            this.OrigPageNumber = OrigPageNumber;
+            this.TransformMatrix = TransformMatrix;
+            this.llx = llx;
+            this.lly = lly;
+            group.OrigPageInfoList.Add(this);
+        }
+        public override string ToString()
+        {
+            return $"W={WidthPts}, H={HeightPts}, OW={OrigWidthMm}, OH={OrigHeightMm}, PN={PageNumber}, File={_supportedFiles[FileIndex]}, OrigPdfPN={OrigPageNumber}";
+        }
+    }
+    static OrigPageInfoGroup AnalyzePages()
+    {
+        OrigPageInfoGroup origPageInfoGroup = new OrigPageInfoGroup();
+        int fileIndex = 0;
+        int pageNumber = 0;
+        float llx = 0f;
+        float lly = 0f;
+        foreach (var file in _supportedFiles)
+        {
+            if (file.EndsWith(PDF_EXTENSION) == false)
+            {
+                //Images
+                var imageData = ImageDataFactory.Create(file);
+
+                float pixelX = imageData.GetWidth();
+                float pixelY = imageData.GetHeight();
+
+                float dpiX = imageData.GetDpiX() > 0 ? imageData.GetDpiX() : 72;
+                float dpiY = imageData.GetDpiY() > 0 ? imageData.GetDpiY() : 72;
+
+                float origXPts = pixelX * 72f / dpiX;
+                float origYPts = pixelY * 72f / dpiY;
+
+                float pageWidthPts;
+                float pageHeightPts;
+                TMatrix transformMatrix;
+                CalculatePageSize(origXPts, origYPts, out pageWidthPts, out pageHeightPts, out transformMatrix, true, 0f, 0f);
+                pageNumber++;
+                //If OrigPageNumber = 0 => image, otherwise pdf.  This case = 0
+                new OrigPageInfo(origXPts, origYPts, pageWidthPts, pageHeightPts, pageNumber, fileIndex, 0, 0f, 0f, transformMatrix, origPageInfoGroup);
+            }
+            else
+            {
+                //PDF
+                using var src = new PdfDocument(new PdfReader(file));
+                for (int i = 1; i <= src.GetNumberOfPages(); i++)
+                {
+                    var srcPage = src.GetPage(i);
+
+                    Rectangle bbox = srcPage.GetCropBox();
+
+                    float origXPts = bbox.GetWidth();
+                    float origYPts = bbox.GetHeight();
+                    //Get location x,y of the cropped box
+                    llx = bbox.GetX();
+                    lly = bbox.GetY();
+
+                    float pageWidthPts;
+                    float pageHeightPts;
+                    TMatrix transformMatrix;
+                    CalculatePageSize(origXPts, origYPts, out pageWidthPts, out pageHeightPts, out transformMatrix, false, llx, lly);
+                    pageNumber++;
+                    //If OrigPageNumber = 0 => image, otherwise pdf.  This case = original pdf page number
+                    new OrigPageInfo(origXPts, origYPts, pageWidthPts, pageHeightPts, pageNumber, fileIndex, i, llx, lly, transformMatrix, origPageInfoGroup);
+                }
+            }
+            fileIndex++;
+        }
+
+        return origPageInfoGroup;
+    }
+
+    static void AddPageFromImage(OrigPageInfo origPageInfo, PdfDocument pdf, PdfFont font, bool addPageNumber = true)
+    {
+        var imageData = ImageDataFactory.Create(_supportedFiles[origPageInfo.FileIndex]);
+        var page = pdf.AddNewPage(new PageSize(origPageInfo.WidthPts, origPageInfo.HeightPts));
+        var canvas = new PdfCanvas(page);
+        origPageInfo.TransformMatrix.ApplyMatrix(canvas, imageData);
+        if (addPageNumber) AddPageNumber(canvas, font, _numberOffsetPts, origPageInfo.PageNumber);
+    }
+    static void AddPageFromPdf(OrigPageInfo origPageInfo, PdfDocument pdf, PdfFont font, bool addPageNumber = true)
+    {
+        using var src = new PdfDocument(new PdfReader(_supportedFiles[origPageInfo.FileIndex]));
+        var srcPage = src.GetPage(origPageInfo.OrigPageNumber);
+
+
+        int rot = srcPage.GetRotation();
+        Rectangle crop = srcPage.GetCropBox();
+        srcPage.SetRotation(0);
+        var pageCopy = srcPage.CopyAsFormXObject(pdf);
+        var newPage = pdf.AddNewPage(new PageSize(origPageInfo.WidthPts, origPageInfo.HeightPts));
+
+        var canvas = new PdfCanvas(newPage);
+
+        origPageInfo.TransformMatrix.ApplyMatrix(canvas, pageCopy);
+
+        if (addPageNumber) AddPageNumber(canvas, font, _numberOffsetPts, origPageInfo.PageNumber);
+    }
+    static void CreateGroupBySizePdfFromFiles(OrigPageInfoGroup origPageInfoGroup, bool addPageNumber = true)
+    {
+        foreach (var list in _origFileGroupsBySize ?? Enumerable.Empty<List<OrigPageInfo>>())
+        {
+
+            using var writer = new PdfWriter(IOPath.ChangeExtension(_outputPdf, null) + "_" + GetSizeLabel(list[0].WidthPts, list[0].HeightPts) + PDF_EXTENSION);
+            using var pdf = new PdfDocument(writer);
+
+            foreach (var origPageInfo in list)
+            {
+                PdfFont font = PdfFontFactory.CreateFont(
+                    _fontPath,
+                    PdfEncodings.WINANSI,
+                    PdfFontFactory.EmbeddingStrategy.PREFER_EMBEDDED
+                );
+                if (origPageInfo.IsImage) AddPageFromImage(origPageInfo, pdf, font, true);
+                else AddPageFromPdf(origPageInfo, pdf, font, true);
+            }
+        }
+    }
+
+    static void CreateOnePdfFromFiles(OrigPageInfoGroup origPageInfoGroup, bool addPageNumber = true)
+    {
+        using var writer = new PdfWriter(IOPath.ChangeExtension(_outputPdf, null) + "_ALL" + PDF_EXTENSION);
+        using var pdf = new PdfDocument(writer);
+        foreach (var origPageInfo in origPageInfoGroup.OrigPageInfoList)
+        {
+            PdfFont font = PdfFontFactory.CreateFont(
+                _fontPath,
+                PdfEncodings.WINANSI,
+                PdfFontFactory.EmbeddingStrategy.PREFER_EMBEDDED);
+
+            if (origPageInfo.IsImage) AddPageFromImage(origPageInfo, pdf, font, true);
+            else AddPageFromPdf(origPageInfo, pdf, font, true);
+        }
+    }
+
+
+    public class TMatrix
+    {
+        float a;
+        float b;
+        float c;
+        float d;
+        float e;
+        float f;
+
+        public TMatrix(float a, float b, float c, float d, float e, float f)
+        {
+            this.a = a;
+            this.b = b;
+            this.c = c;
+            this.d = d;
+            this.e = e;
+            this.f = f;
+        }
+
+        public void ApplyMatrix(PdfCanvas canvas, ImageData imagedata)
+        {
+            canvas.AddImageWithTransformationMatrix(imagedata, a, b, c, d, e, f);
+        }
+        public void ApplyMatrix(PdfCanvas canvas, PdfFormXObject pageCopy)
+        {
+            canvas.AddXObjectWithTransformationMatrix(pageCopy, a, b, c, d, e, f);
+        }
+    }
+    static TMatrix CreatePdfTransformMatrix(float origXPts, float origYPts, float x, float y, float w, float h, float llx, float lly)
+    {
+        // For pdf, we get cropped and rotate area => this will have origin at llx, lly
+        // And also have to scale original
+        //         y+h
+        //  ↑
+        //  │
+        //  │        +-------------------+
+        //  │        |                   |
+        //  │        |       IMAGE       |  height = h
+        //  │        |                   |
+        //  │        +-------------------+
+        //  │        (x, y)
+        //  └────────────────────────────────→
+        //                 x            x+w
+        //Portrait
+        if (origXPts < origYPts)
+        {
+            float sx = w / origXPts;
+            float sy = h / origYPts;
+            float e = x - llx * sx;
+            float f = y - lly * sy;
+            return new TMatrix(
+                sx, 0,
+                0, sy,
+                e, f
+            );
+        }
+        else
+        {
+
+            float sx = w / origYPts;
+            float sy = h / origXPts;
+            float e = x + w + (lly * sy);
+            float f = y - (llx * sx);
+
+            return new TMatrix(
+                0, sy,
+                -sx, 0,
+                e, f
+            );
+        }
+    }
+    static TMatrix CreateImageTransformMatrix(float x, float y, float w, float h, bool isImageLandscape)
+    {
+        //Ammazingly image don't need to scale 
+        //         y+h
+        //  ↑
+        //  │
+        //  │        +-------------------+
+        //  │        |                   |
+        //  │        |       IMAGE       |  height = h
+        //  │        |                   |
+        //  │        +-------------------+
+        //  │        (x, y)
+        //  └────────────────────────────────→
+        //                 x            x+w
+
+        //Portrait
+        if (!isImageLandscape)
+        {
+            return new TMatrix(
+                w, 0,
+                0, h,
+                x, y
+            );
+        }
+        else
+        {
+            return new TMatrix(
+                0, h,
+                -w, 0,
+                x + w,
+                y
+            );
+        }
+    }
+
+    static void CalculatePageSize(float origXPts, float origYPts, out float pageWidthPts, out float pageHeightPts, out TMatrix TransformMatrix, bool isImage, float llx, float lly)
+    {
+        //Note: origXPts, origYPts is X, Y lenghts
+        //x,y placement location calculate from bottom left
+        //w,h width and height of the placement area. w is horizontal and h is vertical.
+        //llx, lly is the location of cropped box in the original pdf page
+
+        //x, y, w, h is parameters for placement on new pdf page.  They are calculated
+        //from user options
+
+        //All are in pts
+        //         y+h
+        //  ↑
+        //  │
+        //  │        +-------------------+
+        //  │        |                   |
+        //  │        |       IMAGE       |  height = h
+        //  │        |                   |
+        //  │        +-------------------+
+        //  │        (x, y)
+        //  └────────────────────────────────→
+        //                 x            x+w
+
+        float x, y, w, h;
+
+        float imgShortPts = Math.Min(origXPts, origYPts);
+        float imgLongPts = Math.Max(origXPts, origYPts);
+        float lsRatio = imgLongPts / imgShortPts;
+
+        if (_usePageWidth)
+        {
+            pageWidthPts = _fitPageWidthPts;
+            x = _marginPts;
+            y = _marginPts;
+            w = pageWidthPts - 2 * _marginPts;
+            if (_allowStretch)
+            {
+                //Page size is calculated from image size, when placing image with _marginPts
+                //will make it stretched
+                pageHeightPts = _fitPageWidthPts * lsRatio;
+                h = pageHeightPts - 2 * _marginPts;
+            }
+            else
+            {
+                //Not allow stretched:
+                //Have w => h from lsRatio
+                h = w * lsRatio;
+                //Then calculate page height
+                pageHeightPts = h + 2 * _marginPts;
+            }
+        }
+        else if (_isOneToOne)
+        {
+            pageWidthPts = imgShortPts + (_marginPts * 2);
+            pageHeightPts = imgLongPts + (_marginPts * 2);
+
+            x = _marginPts;
+            y = _marginPts;
+            w = imgShortPts;
+            h = imgLongPts;
+        }
+        else
+        {
+            // If use standard paper
+            if (!string.IsNullOrEmpty(_standardPageSize) && !_isAuto)
+            {
+                //Specify wrong standard paper size name
+                if (!_PaperSizeDict.ContainsKey(_standardPageSize))
+                    throw new Exception($"Unsupported page size: {_standardPageSize}");
+                //Get user specified paper
+                var paper = _PaperSizeDict[_standardPageSize];
+
+                pageWidthPts = MmToPts(Math.Min(paper.WidthMm, paper.HeightMm));
+                pageHeightPts = MmToPts(Math.Max(paper.WidthMm, paper.HeightMm));
+            }
+            else
+            {
+                //Not specified => pagesize is equal to original size
+                pageWidthPts = Math.Min(origXPts, origYPts);
+                pageHeightPts = Math.Max(origXPts, origYPts);
+
+                //If auto => detect standard size and recalculate paper size
+                if (_isAuto)
+                {
+                    foreach (var paper in _PaperSizeDict)
+                    {
+                        float paperW = MmToPts(paper.Value.WidthMm);
+                        float paperH = MmToPts(paper.Value.HeightMm);
+                        // Paper size is auto detected
+                        if (MatchStandardPageSize(pageWidthPts, pageHeightPts, paperW, paperH, _autoSizeToleranceMm))
+                        {
+                            pageWidthPts = Math.Min(paperW, paperH);
+                            pageHeightPts = Math.Max(paperW, paperH);
+                            break;
+                        }
+                    }
+                }
+            }
+            //Until here paper size are calculated correctly:
+            //  - Specified has highest priority
+            //  - Not specify -> use original size
+            //  - Set with auto -> auto detect.
+            //      If auto can't find => not change value -> fallback to not specified 
+
+            // Stretch -> just fill the area with margin
+            if (_allowStretch)
+            {
+                x = _marginPts;
+                y = _marginPts;
+                w = pageWidthPts - 2 * _marginPts;
+                h = pageHeightPts - 2 * _marginPts;
+            }
+            //Calculate the fill area
+            else
+            {
+                //Maximum ration of h/w is the area inside page after page area reduce the margin
+                float maxw = pageWidthPts - 2 * _marginPts;
+                float maxh = pageHeightPts - 2 * _marginPts;
+                float maxhwRatio = maxh / maxw;
+                //This will fit to w
+                if (maxhwRatio > lsRatio)
+                {
+                    x = _marginPts;
+                    w = pageWidthPts - 2 * _marginPts;
+                    h = w * lsRatio;
+                    y = (pageHeightPts - h) / 2;
+                }
+                else //This will fit to h
+                {
+                    y = _marginPts;
+                    h = pageHeightPts - 2 * _marginPts;
+                    w = h / lsRatio;
+                    x = (pageWidthPts - w) / 2;
+                }
+            }
+        }
+        //Until here all x, y, w, h are calculated.  imgXPts > imgYPts => landscape
+        if (!isImage) TransformMatrix = CreatePdfTransformMatrix(origXPts, origYPts, x, y, w, h, llx, lly);
+        else TransformMatrix = CreateImageTransformMatrix(x, y, w, h, origXPts > origYPts);
+
+    }
+    static void AddPageNumber(PdfCanvas canvas, PdfFont font, float numberOffset, int pageNumber)
+    {
+        canvas.BeginText();
+        canvas.SetFontAndSize(font, _fontSize);
+        canvas.SetFillColor(ColorConstants.GRAY);
+        canvas.MoveText(numberOffset, numberOffset);
+        canvas.ShowText(pageNumber.ToString());
+        canvas.EndText();
+    }
+
+
+
+    static string GetSizeLabel(float widthPts, float heightPts)
+    {
+        float wMm = PtsToMm(widthPts);
+        float hMm = PtsToMm(heightPts);
+
+        float shortSide = Math.Min(wMm, hMm);
+        float longSide = Math.Max(wMm, hMm);
+
+        string sizeLabel = "";
+
+        foreach (var kv in _PaperSizeDict)
+        {
+            float paperShort = Math.Min(kv.Value.WidthMm, kv.Value.HeightMm);
+            float paperLong = Math.Max(kv.Value.WidthMm, kv.Value.HeightMm);
+
+            if (Math.Abs(shortSide - paperShort) <= STANDARD_SIZE_TOLERANCE_MM &&
+                Math.Abs(longSide - paperLong) <= STANDARD_SIZE_TOLERANCE_MM)
+            {
+                //sizeLabel = $"{kv.Key} ({paperShort}x{paperLong} mm)";
+                sizeLabel = $"{kv.Key}";
+                break;
+            }
+            else sizeLabel = $"{Math.Round(shortSide)}x{Math.Round(longSide)} mm";
+        }
+        return sizeLabel;
+    }
+
+    static bool MatchStandardPageSize(float imageWPts, float imageHPts, float paperWPts, float paperHPts, float percentThreshold)
+    {
+        float imgShort = Math.Min(imageWPts, imageHPts);
+        float imgLong = Math.Max(imageWPts, imageHPts);
+
+        float papShort = Math.Min(paperWPts, paperHPts);
+        float papLong = Math.Max(paperWPts, paperHPts);
+
+        float shortDiff = Math.Abs(imgShort - papShort) / papShort * 100f;
+        float longDiff = Math.Abs(imgLong - papLong) / papLong * 100f;
+
+        return shortDiff <= percentThreshold &&
+               longDiff <= percentThreshold;
+    }
+
+    static float MmToPts(float mm)
+        => mm * 72f / 25.4f;
+    static float PtsToMm(float points)
+=> points * 25.4f / 72f;
+    static Dictionary<string, string> ParseArguments(string[] args)
+    {
+        var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var arg in args)
+        {
+            if (!arg.StartsWith("-")) continue;
+            var parts = arg.Substring(1).Split('=', 2);
+            if (parts.Length == 2)
+                dict[parts[0]] = parts[1].Trim('"');
+        }
+
+        return dict;
+    }
+
+}
+
+
+
+
+
+
+
+
+
+
