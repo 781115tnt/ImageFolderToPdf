@@ -154,6 +154,12 @@ class Program
         public float AutoSizeToleranceMm { get; set; } = 5f;
         public string? StandardPageSize { get; set; } = null;
         public float? FitPageWidthMm { get; set; } = 210f;
+        public bool CreateGroups { get; set; } = false;
+        public bool CreateSingle { get; set; } = false;
+        public bool Recursive { get; set; } = true;
+        public bool AddPageNumber { get; set; } = true;
+
+        public bool CreateReport { get; set; } = false;
         public List<string>? SupportedFiles { get { return supportedFiles; } }
         public List<string>? supportedFiles = null;
 
@@ -180,6 +186,11 @@ class Program
         public Configuration(
             string folder,
             string outputPdf,
+            bool creategroups,
+            bool createsingle,
+            bool createreport,
+            bool recursive,
+            bool addpagenumber,
             float marginMm,
             float numberOffsetMm,
             bool stretch,
@@ -189,8 +200,13 @@ class Program
             string fontPath = FONT_PATH,
             float fontSize = 5f)
         {
-            Folder = folder;
+            Folder = folder.Trim('"');
             OutputPdf = outputPdf;
+            CreateGroups = creategroups;
+            CreateSingle = createsingle;
+            CreateReport = createreport;
+            Recursive = recursive;
+            AddPageNumber = addpagenumber;
             MarginMm = marginMm;
             NumberOffsetMm = numberOffsetMm;
             Stretch = stretch;
@@ -200,16 +216,22 @@ class Program
             FontPath = fontPath;
             FontSize = fontSize;
 
-            // NonRecursive
-            // supportedFiles = Directory.EnumerateFiles(folder)
-            //     .Where(f => _ImageExtensions.Contains(IOPath.GetExtension(f).ToLower()))
-            //     .OrderBy(f => IOPath.GetFileName(f), new NaturalSortComparer())
-            //     .ToList();
-            // Recursive
-            supportedFiles = Directory.EnumerateFiles(folder, "*.*", SearchOption.AllDirectories)
-                .Where(f => _ImageExtensions.Contains(IOPath.GetExtension(f).ToLower()))
-                .OrderBy(f => IOPath.GetFileName(f), new NaturalSortComparer())
-                .ToList();
+            if (!Recursive)
+            {
+                // NonRecursive
+                supportedFiles = Directory.EnumerateFiles(folder)
+                    .Where(f => _ImageExtensions.Contains(IOPath.GetExtension(f).ToLower()))
+                    .OrderBy(f => IOPath.GetFileName(f), new NaturalSortComparer())
+                    .ToList();
+            }
+            else
+            {
+                // Recursive
+                supportedFiles = Directory.EnumerateFiles(folder, "*.*", SearchOption.AllDirectories)
+                    .Where(f => _ImageExtensions.Contains(IOPath.GetExtension(f).ToLower()))
+                    .OrderBy(f => IOPath.GetFileName(f), new NaturalSortComparer())
+                    .ToList();
+            }
         }
 
 
@@ -581,7 +603,7 @@ class Program
                         PdfEncodings.WINANSI,
                         PdfFontFactory.EmbeddingStrategy.PREFER_EMBEDDED
                     );
-                    if (origPageInfo.IsImage) AddPageFromImage(origPageInfo, pdf, font, true);
+                    if (origPageInfo.IsImage) AddPageFromImage(origPageInfo, pdf, font, config.AddPageNumber);
                     else AddPageFromPdf(origPageInfo, pdf, font, true);
                 }
             }
@@ -598,7 +620,7 @@ class Program
                     PdfEncodings.WINANSI,
                     PdfFontFactory.EmbeddingStrategy.PREFER_EMBEDDED);
 
-                if (origPageInfo.IsImage) AddPageFromImage(origPageInfo, pdf, font, true);
+                if (origPageInfo.IsImage) AddPageFromImage(origPageInfo, pdf, font, config.AddPageNumber);
                 else AddPageFromPdf(origPageInfo, pdf, font, true);
             }
         }
@@ -661,6 +683,11 @@ class Program
         Configuration config = new Configuration(
             options["input"],
             options["output"],
+            options.ContainsKey("creategroups") && options["creategroups"].ToLower() == "y",
+            options.ContainsKey("createsingle") && options["createsingle"].ToLower() == "y",
+            options.ContainsKey("createreport") && options["createreport"].ToLower() == "y",
+            options.ContainsKey("recursive") && options["recursive"].ToLower() == "y",
+            options.ContainsKey("addpagenumber") && options["addpagenumber"].ToLower() == "y",
             options.ContainsKey("margin") ? float.Parse(options["margin"]) : 8f,
             options.ContainsKey("numberoffset") ? float.Parse(options["numberoffset"]) : 4f,
             options.ContainsKey("stretch") && options["stretch"].ToLower() == "y",
@@ -670,22 +697,22 @@ class Program
             FONT_PATH,
             5f);
 
+        //if (!config.CreateGroups && !config.CreateSingle) return 0;
 
         PageAnalyzer pa = new PageAnalyzer(config);
 
         pa.AnalyzePages();
 
-        foreach(var i in pa.A2Pages) Console.WriteLine(i);
+        //foreach(var i in pa.A2Pages) Console.WriteLine(i);
 
 
 
         PdfCreator pdfCreator = new PdfCreator(pa);
-        pdfCreator.CreateGroupBySizePdfFromFiles(true);
-        pdfCreator.CreateOnePdfFromFiles(true);
+        if (config.CreateGroups) pdfCreator.CreateGroupBySizePdfFromFiles(config.AddPageNumber);
+        if (config.CreateSingle) pdfCreator.CreateOnePdfFromFiles(config.AddPageNumber);
 
-        pa.WriteReportTextFile(false);
+        if (config.CreateReport) pa.WriteReportTextFile(false);
 
-        Console.WriteLine("Done.");
         return 0;
     }
 
@@ -746,7 +773,6 @@ class Program
             if (parts.Length == 2)
                 dict[parts[0]] = parts[1].Trim('"');
         }
-
         return dict;
     }
 
